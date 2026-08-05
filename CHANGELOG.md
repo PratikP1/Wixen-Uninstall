@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-08-05
+## [0.4.0] - 2026-08-05
 
 First public release.
 
@@ -58,5 +58,5 @@ First public release.
 - Tag-triggered release workflow publishing the installer with a SHA-256
   checksum.
 
-[Unreleased]: https://github.com/PratikP1/Wixen-Uninstall/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/PratikP1/Wixen-Uninstall/releases/tag/v0.1.0
+[Unreleased]: https://github.com/PratikP1/Wixen-Uninstall/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/PratikP1/Wixen-Uninstall/releases/tag/v0.4.0
