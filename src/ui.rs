@@ -4,12 +4,9 @@
 //! be driven without a terminal.  On other platforms the existing CLI remains
 //! available for development and automated testing.
 
-use crate::{
-    executor::ExecutionReport,
-    menu::run_menu,
-    plan::RemovalPlan,
-    product::Product,
-};
+#[cfg(not(target_os = "windows"))]
+use crate::menu::run_menu;
+use crate::{executor::ExecutionReport, plan::RemovalPlan, product::Product};
 use std::io;
 
 pub const APP_TITLE: &str = "Wixen Uninstaller";
@@ -64,6 +61,7 @@ pub fn show_report(report: &ExecutionReport) -> io::Result<()> {
     }
 }
 
+#[cfg(any(test, target_os = "windows"))]
 fn selection_prompt_text(first: Product, second: Product) -> String {
     format!(
         "Select a product to remove:\n\nYes — {}\nNo — {}\nCancel — Quit",
@@ -72,6 +70,7 @@ fn selection_prompt_text(first: Product, second: Product) -> String {
     )
 }
 
+#[cfg(any(test, target_os = "windows"))]
 fn confirmation_prompt_text(plan: &RemovalPlan) -> String {
     format!(
         "Ready to remove {}.\n\nThis will attempt {} action(s) and requires Administrator privileges.\n\nSelect OK to start or Cancel to go back.",
@@ -103,14 +102,11 @@ fn report_body(report: &ExecutionReport) -> String {
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use super::{
-        APP_TITLE, confirmation_prompt_text, report_body, selection_prompt_text,
-    };
+    use super::{APP_TITLE, confirmation_prompt_text, report_body, selection_prompt_text};
     use crate::{executor::ExecutionReport, plan::RemovalPlan, product::Product};
     use std::{
         ffi::{OsStr, c_void},
-        io,
-        iter,
+        io, iter,
         os::windows::ffi::OsStrExt,
         ptr,
     };
@@ -132,12 +128,7 @@ mod windows {
 
     #[link(name = "user32")]
     unsafe extern "system" {
-        fn MessageBoxW(
-            hwnd: Hwnd,
-            text: *const u16,
-            caption: *const u16,
-            kind: u32,
-        ) -> i32;
+        fn MessageBoxW(hwnd: Hwnd, text: *const u16, caption: *const u16, kind: u32) -> i32;
     }
 
     pub fn select_product() -> io::Result<Option<Product>> {
@@ -177,7 +168,12 @@ mod windows {
             MB_ICONWARNING
         };
 
-        show_message(&report_body(report), &title, MB_OK | icon | MB_SETFOREGROUND).map(|_| ())
+        show_message(
+            &report_body(report),
+            &title,
+            MB_OK | icon | MB_SETFOREGROUND,
+        )
+        .map(|_| ())
     }
 
     fn dialog_products() -> io::Result<(Product, Product)> {
@@ -220,11 +216,7 @@ mod windows {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        executor::ExecutionReport,
-        plan::RemovalPlan,
-        product::Product,
-    };
+    use crate::{executor::ExecutionReport, plan::RemovalPlan, product::Product};
 
     #[test]
     fn selection_prompt_mentions_both_products() {
