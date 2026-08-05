@@ -29,6 +29,8 @@ pub enum UninstallParseError {
     Empty,
     /// A quoted program path had no closing quote.
     UnterminatedQuote(String),
+    /// The program was empty — e.g. `""` — so there is nothing to run.
+    MissingProgram(String),
 }
 
 impl fmt::Display for UninstallParseError {
@@ -37,6 +39,9 @@ impl fmt::Display for UninstallParseError {
             UninstallParseError::Empty => f.write_str("uninstall string is empty"),
             UninstallParseError::UnterminatedQuote(string) => {
                 write!(f, "unterminated quote in uninstall string {string:?}")
+            }
+            UninstallParseError::MissingProgram(string) => {
+                write!(f, "no program to run in uninstall string {string:?}")
             }
         }
     }
@@ -80,6 +85,11 @@ impl UninstallCommand {
         }
 
         let (program, rest) = split_program(trimmed)?;
+        // A quoted empty program (`""`) or a string of only separators leaves
+        // nothing to run; that is an error, not a command with no program.
+        if program.is_empty() {
+            return Err(UninstallParseError::MissingProgram(trimmed.to_owned()));
+        }
         Ok(Self {
             program,
             args: split_arguments(rest),
@@ -234,6 +244,21 @@ mod tests {
         .unwrap();
         assert!(command.program.ends_with("Instup.exe"));
         assert_eq!(command.args, vec!["/instop:uninstall", "/silent"]);
+    }
+
+    #[test]
+    fn a_quoted_empty_program_is_rejected() {
+        // Found by the fuzzer: `""` parsed to a command with an empty program,
+        // which would then be handed to the process launcher as the program to
+        // run. There must be something to run.
+        assert!(matches!(
+            UninstallCommand::parse(r#""" /S"#),
+            Err(UninstallParseError::MissingProgram(_))
+        ));
+        assert!(matches!(
+            UninstallCommand::parse(r#""""#),
+            Err(UninstallParseError::MissingProgram(_))
+        ));
     }
 
     #[test]
@@ -399,6 +424,10 @@ mod tests {
             unterminated.contains("open-only-quote"),
             "the offending input is shown: {unterminated}"
         );
+
+        let missing = UninstallParseError::MissingProgram("just-args".to_owned()).to_string();
+        assert!(missing.contains("no program"));
+        assert!(missing.contains("just-args"));
     }
 
     // ── never panics ─────────────────────────────────────────────────────────

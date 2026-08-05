@@ -9,11 +9,13 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use wixen_uninstall_lib::menu::{parse_input, MenuChoice};
+use wixen_uninstall_lib::menu::{MenuChoice, parse_input};
 use wixen_uninstall_lib::product::Product;
 
 fuzz_target!(|data: &[u8]| {
-    let Ok(s) = std::str::from_utf8(data) else { return };
+    let Ok(s) = std::str::from_utf8(data) else {
+        return;
+    };
 
     match parse_input(s) {
         MenuChoice::Product(p) => {
