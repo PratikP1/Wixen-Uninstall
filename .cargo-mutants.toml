@@ -9,9 +9,9 @@
 # Run with the test-utils feature so StubExecutor is available.
 additional_cargo_args = ["--features", "test-utils"]
 
-# Exclude the Windows-only code from mutation testing because it
+# Exclude the Windows-only executor helpers from mutation testing because they
 # cannot be executed on Linux CI.
-exclude_globs = ["src/executor.rs:windows::*"]
+exclude_re = ["executor::windows::"]
 
 # Fail the build if more than 5 % of mutants survive.
 minimum_test_count = 1
