@@ -22,6 +22,21 @@
     </security>
   </trustInfo>
 
+  <!-- Version 6 of the common controls. This is load-bearing, not cosmetic:
+       TaskDialogIndirect only exists in comctl32 v6, and it is also what gives
+       the dialogs their modern appearance and correct high-DPI rendering. -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+          type="win32"
+          name="Microsoft.Windows.Common-Controls"
+          version="6.0.0.0"
+          processorArchitecture="*"
+          publicKeyToken="6595b64144ccf1df"
+          language="*"/>
+    </dependentAssembly>
+  </dependency>
+
   <!-- Declare Windows 10/11 support so version-gated APIs and the modern
        common controls behave as designed. -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">

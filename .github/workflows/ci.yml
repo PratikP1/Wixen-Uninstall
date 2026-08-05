@@ -141,19 +141,45 @@ jobs:
       # Without an elevation manifest the installed app runs unelevated from the
       # Start-menu shortcut and every removal action fails with "Access is
       # denied". Assert it is actually embedded rather than hoping it is.
-      - name: Verify the binary requests Administrator
+      - name: Verify the embedded manifest
         shell: pwsh
         run: |
           $exe = 'target\x86_64-pc-windows-msvc\release\wixen_uninstall.exe'
           $bytes = [System.IO.File]::ReadAllBytes($exe)
           $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+
+          # Without this the Start-menu shortcut runs unelevated and every
+          # removal action fails with "Access is denied".
           if ($text -notmatch 'requireAdministrator') {
             throw "$exe has no requireAdministrator manifest; it would run unelevated"
+          }
+          # Without this TaskDialogIndirect does not exist and the process
+          # cannot even start: System32's comctl32 is still version 5.
+          if ($text -notmatch 'Microsoft\.Windows\.Common-Controls') {
+            throw "$exe is missing the comctl32 v6 dependency; task dialogs would not load"
           }
           if ($text -notmatch 'longPathAware') {
             throw "$exe is missing the longPathAware manifest setting"
           }
-          Write-Host 'Elevation manifest verified.'
+          Write-Host 'Manifest verified: elevation, common controls v6, long paths.'
+
+      # Proves the manifest actually resolves at run time: the process has to
+      # load comctl32 v6 and put its first task dialog on screen. A missing or
+      # malformed dependency shows up here as an immediate exit.
+      - name: Smoke-test the built application
+        shell: pwsh
+        run: |
+          $exe = 'target\x86_64-pc-windows-msvc\release\wixen_uninstall.exe'
+          $process = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 10
+
+          if ($process.HasExited) {
+            throw "$exe exited immediately with code $($process.ExitCode); " +
+                  "the side-by-side manifest or a dialog call is broken"
+          }
+
+          Stop-Process -Id $process.Id -Force
+          Write-Host 'Application started and displayed its first dialog.'
 
       - name: Compile installer
         shell: pwsh

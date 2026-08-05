@@ -17,12 +17,21 @@ browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
 - Sweeps same-vendor companion products during cleanup, including **McAfee
   LiveSafe / WebAdvisor**, **Norton Secure VPN / Utilities**, **Avast Secure
   Browser / Cleanup**, and **AVG Secure Browser / TuneUp** leftovers.
-- Fully accessible on Windows - native Win32 dialogs for selection,
-  confirmation, and status, with keyboard-only navigation, clear
-  **Tab/Shift+Tab**, **Enter/Space**, and **Esc** guidance, and screen-reader
-  friendly system controls. Press **F1** in the Windows UI to open the bundled
-  HTML help guide. The CLI remains available as a fallback for development and
-  test environments.
+- Fully accessible on Windows - built on native **task dialogs**, the same
+  modern dialog Windows itself uses. Every product is its own labelled button
+  rather than a "Yes"/"No" whose meaning lives in the body text, so NVDA, JAWS,
+  and Narrator announce exactly what each control does. Keyboard-only
+  throughout: **Tab/Shift+Tab** between controls, **arrow keys** between
+  product buttons, **Enter/Space** to activate, **Alt+letter** access keys,
+  **Esc** to cancel, and **F1** for the bundled help guide. Dialogs scale
+  correctly on high-DPI displays. The CLI remains available as a fallback for
+  development and test environments.
+- **Shows exactly what it will delete** before it deletes anything: expand
+  *Show what will be removed* on the confirmation screen for the full list of
+  folders, driver files, services, scheduled tasks, and registry keys.
+- **Reports live progress.** The removal runs on a worker thread behind a
+  progress bar that names each stage, instead of freezing the window - which,
+  with a screen reader, is indistinguishable from a crash.
 - Explicitly targets **64-bit Windows 10 and Windows 11**.
 - Requests Administrator on launch via an embedded application manifest, so the
   Start-menu shortcut triggers a UAC prompt instead of silently failing every
@@ -75,18 +84,22 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
 2. Right-click the installer and choose **Run as administrator**.
 3. Follow the wizard.  After installation, launch **Wixen Uninstaller** from
    the Start menu.
-4. A native Windows dialog will appear and ask which product you want to
-   remove.  Use **Tab** / **Shift+Tab** to move between buttons, **Enter** or
-   **Space** to activate the focused button, **Esc** to open the next page of
-   products or quit, and **F1** to open the installed HTML help guide.
-5. Confirm the generated removal plan in the follow-up dialog.  Use **Tab** /
-   **Shift+Tab** to move focus, **Enter** or **Space** to start, **Esc** to go
-   back, and **F1** to open the installed HTML help guide.
-6. If you are removing Avast or AVG and normal-mode cleanup reports access
+4. Choose the product to remove.  Each one is its own button, labelled with
+   the product name and the companion leftovers it also sweeps up.  Move
+   between them with the **arrow keys** or **Tab**, and activate with **Enter**
+   or **Space**.
+5. Review the plan.  Expand **Show what will be removed** to read the exact
+   folders, driver files, services, scheduled tasks, and registry keys before
+   anything is deleted.  Focus starts on **Cancel**, so pressing **Enter** by
+   reflex never begins a removal - choose **Remove it** (or **Alt+R**)
+   deliberately.
+6. Watch the progress bar.  A removal cannot be interrupted part-way, because
+   stopping half-finished can leave the product broken.
+7. Review the completion report.  It separates real errors from actions
+   skipped for safety; expand **Show details** for the full list.
+8. If you are removing Avast or AVG and normal-mode cleanup reports access
    errors, reboot into **Windows Safe Mode** and run Wixen again.
-7. Review the completion report shown at the end. It separates real errors from
-   actions skipped for safety.
-8. **Restart Windows** to finish the cleanup — removing kernel drivers and
+9. **Restart Windows** to finish the cleanup — removing kernel drivers and
    services only fully takes effect after a reboot.
 
 > **Note:** The tool must be run with Administrator privileges.  Both the
@@ -229,7 +242,10 @@ src/
   executor.rs   - Executor trait + LiveExecutor + StubExecutor
   elevation.rs  - Administrator privilege detection
   menu.rs       - accessible CLI fallback menu
-  ui.rs         - Win32 dialog UI + CLI fallback orchestration
+  ui.rs         - screen wording (pure, unit tested) + platform dispatch
+  ui/
+    task_dialog.rs - safe wrapper over Win32 TaskDialogIndirect
+    windows.rs     - the Windows screens, assembled from ui.rs wording
   main.rs       - entry point
 
 docs/
@@ -250,6 +266,21 @@ build.rs                  - embeds the Windows elevation manifest
 wixen_uninstall.manifest  - requireAdministrator, longPathAware, DPI awareness
 wixen_uninstall.iss       - Inno Setup packaging script
 ```
+
+### How the UI is put together
+
+`ui.rs` decides what every screen *says*; `ui/windows.rs` decides how it is
+drawn. That split is deliberate: the wording, the details pane, the report
+summary, and the truncation rules are plain functions over plain data, so they
+are unit tested on Linux, while only the `TaskDialogIndirect` calls are
+Windows-only.
+
+The dialogs need version 6 of the common controls, which
+`wixen_uninstall.manifest` declares. That dependency is load-bearing, not
+cosmetic: `TaskDialogIndirect` does not exist in the version 5 comctl32 that
+lives in System32, so a missing dependency stops the process from starting at
+all. CI asserts the manifest is embedded and then launches the built binary to
+prove it resolves at run time.
 
 ### How a removal is ordered, and why
 

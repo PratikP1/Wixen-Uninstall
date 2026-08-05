@@ -63,12 +63,56 @@
     </p>
 
     <h2>Keyboard shortcuts</h2>
+    <p>
+      Wixen uses standard Windows dialogs, so every screen works entirely from
+      the keyboard and reads correctly in NVDA, JAWS, and Narrator.
+    </p>
     <ul>
-      <li><kbd>Tab</kbd> and <kbd>Shift+Tab</kbd> move between buttons.</li>
-      <li><kbd>Enter</kbd> or <kbd>Space</kbd> activates the focused button.</li>
-      <li><kbd>Esc</kbd> goes to the next product page, goes back, or quits.</li>
-      <li><kbd>F1</kbd> opens this help file while Wixen Uninstaller is focused.</li>
+      <li><kbd>Tab</kbd> and <kbd>Shift+Tab</kbd> move between controls.</li>
+      <li>
+        <kbd>Up</kbd> and <kbd>Down</kbd> move between the product buttons on
+        the first screen.
+      </li>
+      <li><kbd>Enter</kbd> or <kbd>Space</kbd> activates the focused control.</li>
+      <li>
+        <kbd>Alt</kbd> plus the underlined letter activates a button directly —
+        <kbd>Alt+R</kbd> for <strong>Remove it</strong>, for example.
+      </li>
+      <li><kbd>Esc</kbd> cancels the current screen or quits.</li>
+      <li><kbd>F1</kbd> opens this help file from any Wixen screen.</li>
     </ul>
+
+    <h2>The screens</h2>
+    <dl>
+      <dt><strong>Choose a product</strong></dt>
+      <dd>
+        Each supported product is its own button, labelled with the product
+        name and the companion leftovers its cleanup also sweeps up. Choose one
+        to continue, or Cancel to quit without changing anything.
+      </dd>
+
+      <dt><strong>Confirm the removal</strong></dt>
+      <dd>
+        Shows how many actions will run. Expand
+        <strong>Show what will be removed</strong> to read the exact folders,
+        driver files, services, scheduled tasks, and registry keys first.
+        Focus starts on <strong>Cancel</strong>, so pressing <kbd>Enter</kbd>
+        by reflex never begins a removal.
+      </dd>
+
+      <dt><strong>Progress</strong></dt>
+      <dd>
+        A progress bar tracks the work, and the text names each stage as it
+        starts. A removal cannot be interrupted part-way, because stopping
+        half-finished can leave the product in a broken state.
+      </dd>
+
+      <dt><strong>Result</strong></dt>
+      <dd>
+        Reports what succeeded. If anything failed or was skipped, expand
+        <strong>Show details</strong> for the full list.
+      </dd>
+    </dl>
 
     <h2>Supported products</h2>
     <ul>
@@ -84,8 +128,11 @@
         Launch Wixen Uninstaller. It requests Administrator rights, so accept
         the Windows UAC prompt.
       </li>
-      <li>Select the product you want to remove.</li>
-      <li>Review the generated removal plan.</li>
+      <li>Choose the product you want to remove.</li>
+      <li>
+        Review the removal plan, expanding
+        <strong>Show what will be removed</strong> if you want the full list.
+      </li>
       <li>Start the cleanup and review the completion report.</li>
       <li>
         <strong>Restart Windows.</strong> Removing kernel drivers and services

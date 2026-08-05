@@ -4,7 +4,7 @@
 
 use std::io;
 use wixen_uninstall_lib::{
-    executor::{StubExecutor, execute},
+    executor::{RemovalPhase, StubExecutor, execute, execute_with_progress},
     menu::{MenuChoice, parse_input, run_menu},
     plan::RemovalPlan,
     product::Product,
@@ -148,6 +148,86 @@ fn driver_images_are_deleted_once_their_services_are_gone() {
         );
         assert_eq!(report.actions_succeeded, plan.action_count());
     }
+}
+
+// ─── Progress reporting ──────────────────────────────────────────────────────
+
+#[test]
+fn progress_counts_every_action_exactly_once_and_ends_at_the_total() {
+    // The progress bar's range is the plan's action count, so a callback that
+    // skipped or double-counted an action would leave the bar short or overrun.
+    for &product in Product::all() {
+        let plan = RemovalPlan::for_product(product);
+        let mut seen = Vec::new();
+
+        let report = execute_with_progress(&plan, &StubExecutor::all_removed(), &mut |_, done| {
+            seen.push(done)
+        });
+
+        assert_eq!(
+            seen,
+            (1..=plan.action_count()).collect::<Vec<_>>(),
+            "{product}: progress should count 1..=total with no gaps"
+        );
+        assert_eq!(report.actions_attempted, plan.action_count());
+    }
+}
+
+#[test]
+fn progress_phases_follow_the_documented_removal_order() {
+    let plan = RemovalPlan::for_product(Product::Avast);
+    let mut phases = Vec::new();
+
+    execute_with_progress(&plan, &StubExecutor::all_removed(), &mut |phase, _| {
+        if phases.last() != Some(&phase) {
+            phases.push(phase);
+        }
+    });
+
+    assert_eq!(
+        phases,
+        vec![
+            RemovalPhase::ScheduledTasks,
+            RemovalPhase::Services,
+            RemovalPhase::Files,
+            RemovalPhase::Registry,
+        ],
+        "tasks must precede services, which must precede files"
+    );
+}
+
+#[test]
+fn every_phase_index_is_a_valid_slot_in_the_progress_display() {
+    // The UI ships one line of text per phase and looks it up by index, so a
+    // short list or a wrong index would silently stop updating the dialog.
+    let phases = RemovalPhase::all();
+    assert_eq!(phases.len(), 4, "every phase must have a display slot");
+
+    for (slot, &phase) in phases.iter().enumerate() {
+        assert_eq!(phase.index(), slot);
+    }
+}
+
+#[test]
+fn each_phase_describes_the_work_it_actually_does() {
+    let descriptions: Vec<&str> = RemovalPhase::all()
+        .iter()
+        .map(|phase| phase.description())
+        .collect();
+
+    assert!(RemovalPhase::ScheduledTasks.description().contains("task"));
+    assert!(RemovalPhase::Services.description().contains("service"));
+    assert!(RemovalPhase::Files.description().contains("files"));
+    assert!(RemovalPhase::Registry.description().contains("registry"));
+
+    let mut unique = descriptions.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(
+        unique.len(),
+        descriptions.len(),
+        "each phase needs its own wording, or the dialog repeats itself"
+    );
 }
 
 // ─── Path safety ─────────────────────────────────────────────────────────────

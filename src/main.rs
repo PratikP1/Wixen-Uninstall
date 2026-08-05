@@ -7,9 +7,9 @@
 use std::{io, process::ExitCode};
 use wixen_uninstall_lib::{
     elevation::{NOT_ELEVATED_MESSAGE, is_elevated},
-    executor::{LiveExecutor, execute},
+    executor::LiveExecutor,
     plan::RemovalPlan,
-    ui::{confirm_plan, select_product, show_error, show_report},
+    ui::{confirm_plan, run_removal, select_product, show_error, show_report},
 };
 
 /// Returned when Wixen refuses to start; nothing has been changed.
@@ -36,7 +36,7 @@ fn main() -> io::Result<ExitCode> {
             continue;
         }
 
-        let report = execute(&plan, &LiveExecutor);
+        let report = run_removal(&plan, &LiveExecutor)?;
         show_report(&report)?;
         return Ok(ExitCode::SUCCESS);
     }

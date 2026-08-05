@@ -29,15 +29,29 @@ Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.1.0.exe
 
 ## Accessibility
 
-Wixen is built to be driven entirely from the keyboard with a screen reader:
+Wixen is built on native Windows task dialogs — the same modern dialog Windows
+itself uses — so NVDA, JAWS, and Narrator read every screen without any special
+configuration, and everything scales correctly on high-DPI displays.
 
-- <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> move between buttons.
-- <kbd>Enter</kbd> or <kbd>Space</kbd> activates the focused button.
-- <kbd>Esc</kbd> moves to the next page of products, goes back, or quits.
+Each product is its own labelled button, so a screen reader announces the
+product name and what its cleanup sweeps up, rather than a bare "Yes" or "No".
+
+- <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> move between controls.
+- <kbd>Up</kbd> / <kbd>Down</kbd> move between the product buttons.
+- <kbd>Enter</kbd> or <kbd>Space</kbd> activates the focused control.
+- <kbd>Alt</kbd> plus the underlined letter activates a button directly.
+- <kbd>Esc</kbd> cancels the current screen or quits.
 - <kbd>F1</kbd> opens the installed HTML help guide.
 
-Dialogs are standard Win32 message boxes, so NVDA, JAWS, and Narrator read them
-without any special configuration.
+## Nothing is deleted before you have seen the list
+
+The confirmation screen has a **Show what will be removed** section listing the
+exact folders, driver files, services, scheduled tasks, and registry keys.
+Focus starts on **Cancel**, so pressing <kbd>Enter</kbd> by reflex never begins
+a removal.
+
+While it works, a progress bar names each stage rather than the window simply
+freezing.
 
 ## Before you start
 

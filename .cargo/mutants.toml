@@ -23,6 +23,7 @@ exclude_re = [
     "is_elevated",
 ]
 
-# `main` has no test harness, and the UI dispatch wrappers in `ui.rs` are
-# one-line `#[cfg]` forwards whose logic is covered through `menu.rs`.
-exclude_globs = ["src/main.rs"]
+# `main` has no test harness. `ui/task_dialog.rs` and `ui/windows.rs` are
+# Windows-only: they are compiled out on Linux, and what they *say* is decided
+# by the pure functions in `ui.rs`, which are covered here.
+exclude_globs = ["src/main.rs", "src/ui/task_dialog.rs", "src/ui/windows.rs"]

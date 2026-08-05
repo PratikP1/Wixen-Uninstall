@@ -20,13 +20,25 @@ First public release.
 - Same-vendor companion cleanup for McAfee LiveSafe / WebAdvisor, Norton Secure
   VPN / Utilities, Avast Secure Browser / Cleanup, and AVG Secure Browser /
   TuneUp leftovers.
-- Native Win32 dialogs with full keyboard navigation and screen-reader support;
-  <kbd>F1</kbd> opens the bundled HTML help guide.
+- Native Win32 **task dialogs** throughout: each product is its own labelled
+  command-link button rather than a "Yes"/"No" whose meaning lives in the body
+  text, so screen readers announce exactly what each control does. Full
+  keyboard navigation with arrow keys, <kbd>Alt</kbd> access keys, and
+  <kbd>Esc</kbd>; <kbd>F1</kbd> opens the bundled HTML help guide.
+- A confirmation screen that lists the exact folders, driver files, services,
+  scheduled tasks, and registry keys behind "Show what will be removed", with
+  focus starting on Cancel so <kbd>Enter</kbd> never begins a removal by
+  reflex.
+- A progress screen: the removal runs on a worker thread behind a progress bar
+  that names each stage, rather than freezing the window.
+- A result screen that separates real failures from actions skipped for safety,
+  with the full list behind "Show details".
 - Accessible CLI menu as a development and testing fallback.
 - Windows installer built with Inno Setup, uninstallable through Add or Remove
   Programs.
-- Elevation manifest so the app requests Administrator on launch, plus
-  `longPathAware` and per-monitor DPI awareness.
+- Application manifest declaring Administrator elevation, common controls
+  version 6 (which the task dialogs require), `longPathAware`, and per-monitor
+  DPI awareness.
 - Driver-image guards: a kernel driver's `.sys` file is only deleted once its
   service has been removed.
 - Machine-specific path resolution through `{ProgramFiles}`-style placeholders,
@@ -36,8 +48,9 @@ First public release.
   advising a restart.
 - Fuzz targets for the menu parser, product lookup, and path resolver.
 - CI: formatting, Clippy on both the host and Windows targets, tests on Linux
-  and Windows, fuzz smoke runs, and installer packaging with an assertion that
-  the elevation manifest is embedded.
+  and Windows, fuzz smoke runs, and installer packaging. The Windows job
+  asserts the manifest is embedded and then launches the built binary to prove
+  the side-by-side dependency resolves at run time.
 - Tag-triggered release workflow publishing the installer with a SHA-256
   checksum.
 

@@ -138,6 +138,58 @@ pub trait Executor {
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
+// ─── Progress ────────────────────────────────────────────────────────────────
+
+/// Which group of artifacts the executor is working through.
+///
+/// Reported to the UI so a long removal can say what it is doing rather than
+/// looking frozen — which, with a screen reader, is indistinguishable from a
+/// crash.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemovalPhase {
+    ScheduledTasks,
+    Services,
+    Files,
+    Registry,
+}
+
+impl RemovalPhase {
+    /// Every phase, in the order [`execute`] runs them.
+    pub fn all() -> &'static [RemovalPhase] {
+        &[
+            RemovalPhase::ScheduledTasks,
+            RemovalPhase::Services,
+            RemovalPhase::Files,
+            RemovalPhase::Registry,
+        ]
+    }
+
+    /// Position in [`RemovalPhase::all`], so the phase can cross a thread
+    /// boundary as a plain integer.
+    pub fn index(self) -> usize {
+        match self {
+            RemovalPhase::ScheduledTasks => 0,
+            RemovalPhase::Services => 1,
+            RemovalPhase::Files => 2,
+            RemovalPhase::Registry => 3,
+        }
+    }
+
+    /// Present-tense description for the progress display.
+    pub fn description(self) -> &'static str {
+        match self {
+            RemovalPhase::ScheduledTasks => "Removing scheduled tasks…",
+            RemovalPhase::Services => "Stopping and removing services…",
+            RemovalPhase::Files => "Deleting files and folders…",
+            RemovalPhase::Registry => "Cleaning up registry keys…",
+        }
+    }
+}
+
+/// Progress notification: the phase now running, and how many of the plan's
+/// actions are finished.
+pub type ProgressCallback<'a> = &'a mut dyn FnMut(RemovalPhase, usize);
+
 /// Explains why a driver image was left on disk.
 fn driver_guard_reason(service: &str) -> String {
     format!(
@@ -155,10 +207,34 @@ fn driver_guard_reason(service: &str) -> String {
 /// registration is gone before its image is deleted; then files; then the
 /// registry, which is what makes the removal invisible to Windows.
 pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
+    execute_with_progress(plan, executor, &mut |_, _| {})
+}
+
+/// As [`execute`], reporting progress after every action.
+///
+/// `on_progress` receives the phase now running and the number of actions
+/// completed so far, counted against [`RemovalPlan::action_count`].
+pub fn execute_with_progress(
+    plan: &RemovalPlan,
+    executor: &dyn Executor,
+    on_progress: ProgressCallback<'_>,
+) -> ExecutionReport {
     let mut tally = Tally::default();
+    let mut completed = 0usize;
+    let mut step = |tally: &mut Tally, outcome, label: &str, phase| {
+        tally.record(outcome, label);
+        completed += 1;
+        on_progress(phase, completed);
+    };
 
     for task in &plan.scheduled_tasks {
-        tally.record(executor.delete_scheduled_task(task), &task.task_path);
+        let outcome = executor.delete_scheduled_task(task);
+        step(
+            &mut tally,
+            outcome,
+            &task.task_path,
+            RemovalPhase::ScheduledTasks,
+        );
     }
 
     let mut removed_services: Vec<&str> = Vec::new();
@@ -167,7 +243,7 @@ pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
         if outcome.is_success() {
             removed_services.push(&service.name);
         }
-        tally.record(outcome, &service.name);
+        step(&mut tally, outcome, &service.name, RemovalPhase::Services);
     }
 
     for file in &plan.file_paths {
@@ -175,11 +251,12 @@ pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
             Some(service) => ActionOutcome::Skipped(driver_guard_reason(service)),
             None => executor.remove_file_path(file),
         };
-        tally.record(outcome, &file.path);
+        step(&mut tally, outcome, &file.path, RemovalPhase::Files);
     }
 
     for entry in &plan.registry_entries {
-        tally.record(executor.remove_registry_entry(entry), &entry.key_path);
+        let outcome = executor.remove_registry_entry(entry);
+        step(&mut tally, outcome, &entry.key_path, RemovalPhase::Registry);
     }
 
     ExecutionReport {
