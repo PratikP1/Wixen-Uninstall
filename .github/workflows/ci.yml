@@ -131,9 +131,36 @@ jobs:
           $version = $versionLine.Matches[0].Groups[1].Value
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version"
 
-      - name: Install Inno Setup
+      # The windows-latest image already ships Inno Setup 6, and Chocolatey
+      # refuses to downgrade to a pinned older version, so use what is there and
+      # only install when the image drops it.
+      - name: Ensure Inno Setup is available
+        id: inno
         shell: pwsh
-        run: choco install innosetup --version=6.2.2 --no-progress -y
+        run: |
+          $candidates = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+          )
+          $compiler = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $compiler) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) {
+              throw "choco install innosetup failed with exit code $LASTEXITCODE"
+            }
+            $compiler = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          if (-not $compiler) {
+            throw "ISCC.exe not found after install. Looked in: $($candidates -join ', ')"
+          }
+
+          # Read the version through PowerShell rather than `ISCC /?`, which
+          # exits non-zero and would fail the step.
+          $version = (Get-Item $compiler).VersionInfo.ProductVersion
+          Write-Host "Using Inno Setup $version at $compiler"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "compiler=$compiler"
 
       - name: Build release binary
         run: cargo build --locked --release --target x86_64-pc-windows-msvc
@@ -184,10 +211,7 @@ jobs:
       - name: Compile installer
         shell: pwsh
         run: |
-          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (-not (Test-Path $compiler)) {
-            throw "ISCC.exe not found at $compiler"
-          }
+          $compiler = '${{ steps.inno.outputs.compiler }}'
 
           & $compiler `
             "/DAppVersion=${{ steps.package.outputs.version }}" `
