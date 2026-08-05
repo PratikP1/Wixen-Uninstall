@@ -1,4 +1,4 @@
-; Wixen Uninstaller — Inno Setup Script
+; Wixen Uninstaller - Inno Setup Script
 ; Author: PratikP1
 ;
 ; This script packages the compiled wixen_uninstall.exe into a distributable
@@ -16,7 +16,8 @@
 #define AppPublisher "PratikP1"
 #define AppURL       "https://github.com/PratikP1/Wixen-Uninstall"
 #define AppExeName   "wixen_uninstall.exe"
-#define BinaryDir    "..\target\release"
+#define HelpFileName "WixenUninstallerHelp.html"
+#define BinaryDir    "target\release"
 
 [Setup]
 AppId={{A7C3D2F1-8E4B-4C9A-B5D6-1F2E3A4B5C6D}
@@ -40,13 +41,13 @@ MinVersion=10.0
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
-; Require Administrator — the uninstaller must run elevated.
+; Require Administrator - the uninstaller must run elevated.
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=commandline
 
 ; Accessibility: keep the wizard simple and screen-reader friendly.
-; AppReadmeFile points to the README so it is shown in the wizard.
-AppReadmeFile=..\README.md
+; AppReadmeFile points to the installed HTML help file.
+AppReadmeFile={app}\{#HelpFileName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -58,11 +59,14 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; The compiled binary.
 Source: "{#BinaryDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; Human-readable documentation.
-Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+; Installed HTML help file.
+Source: "docs\{#HelpFileName}"; DestDir: "{app}"; Flags: ignoreversion isreadme
+
+; Human-readable Markdown documentation for the install folder.
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Start-menu shortcut — runs elevated automatically.
+; Start-menu shortcut - runs elevated automatically.
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Parameters: ""; \
     WorkingDir: "{app}"; \
@@ -79,14 +83,14 @@ Filename: "{app}\{#AppExeName}"; \
     Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallRun]
-; Nothing extra to do — the Windows uninstaller entry is auto-created by Inno.
+; Nothing extra to do - the Windows uninstaller entry is auto-created by Inno.
 
 [UninstallDelete]
 Type: dirifempty; Name: "{app}"
 
 [Code]
 { ---------------------------------------------------------------------------- }
-{ Pascal script — accessibility helpers                                        }
+{ Pascal script - accessibility helpers                                        }
 { ---------------------------------------------------------------------------- }
 
 { Announce wizard page changes to the Windows accessibility framework via      }

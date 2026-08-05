@@ -17,16 +17,18 @@ browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
 - Sweeps same-vendor companion products during cleanup, including **McAfee
   LiveSafe / WebAdvisor**, **Norton Secure VPN / Utilities**, **Avast Secure
   Browser / Cleanup**, and **AVG Secure Browser / TuneUp** leftovers.
-- Fully accessible on Windows — native Win32 dialogs for selection,
+- Fully accessible on Windows - native Win32 dialogs for selection,
   confirmation, and status, with keyboard-only navigation, clear
   **Tab/Shift+Tab**, **Enter/Space**, and **Esc** guidance, and screen-reader
-  friendly system controls.  The CLI remains available as a fallback for
-  development and test environments.
+  friendly system controls. Press **F1** in the Windows UI to open the bundled
+  HTML help guide. The CLI remains available as a fallback for development and
+  test environments.
 - Explicitly targets **64-bit Windows 10 and Windows 11**.
 - Deletes self-healing scheduled tasks before services and file paths so
   stubborn suites like Avast and AVG cannot immediately reinstall themselves
   during cleanup.
 - Packaged as a standalone Windows installer via **Inno Setup**.
+- Ships with an installed HTML help guide for release builds.
 - Written in pure Rust; no runtime dependencies.
 - Wixen itself is cleanly uninstallable through the standard Windows
   **Add or Remove Programs** flow.
@@ -64,11 +66,11 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
    the Start menu.
 4. A native Windows dialog will appear and ask which product you want to
    remove.  Use **Tab** / **Shift+Tab** to move between buttons, **Enter** or
-   **Space** to activate the focused button, and **Esc** to open the next page
-   of products or quit.
+   **Space** to activate the focused button, **Esc** to open the next page of
+   products or quit, and **F1** to open the installed HTML help guide.
 5. Confirm the generated removal plan in the follow-up dialog.  Use **Tab** /
-   **Shift+Tab** to move focus, **Enter** or **Space** to start, and **Esc** to
-   go back.
+   **Shift+Tab** to move focus, **Enter** or **Space** to start, **Esc** to go
+   back, and **F1** to open the installed HTML help guide.
 6. If you are removing Avast or AVG and normal-mode cleanup reports access
    errors, reboot into **Windows Safe Mode** and run Wixen again.
 7. Review the completion report shown at the end.
@@ -76,7 +78,10 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
 > **Note:** The tool must be run with Administrator privileges.  The Inno Setup
 > installer handles this automatically via a UAC prompt.
 >
-> **Wixen uninstall:** To remove Wixen itself, use **Settings ▸ Apps ▸ Installed
+> **Help file:** The installer places `WixenUninstallerHelp.html` next to the
+> application executable and opens it when you press **F1** from the Windows UI.
+>
+> **Wixen uninstall:** To remove Wixen itself, use **Settings > Apps > Installed
 > apps** (or **Add or Remove Programs**) and uninstall **Wixen Uninstaller** like
 > any other Windows application.
 
@@ -128,7 +133,7 @@ cargo +nightly fuzz run fuzz_from_menu_index -- -max_total_time=60
 
 1. Compile the release binary (see above).
 2. Open `wixen_uninstall.iss` in the Inno Setup Compiler.
-3. Click **Build ▸ Compile** (or press `F9`).
+3. Click **Build > Compile** (or press `F9`).
 4. The installer is written to `installer_output/`.
 
 ---
@@ -137,16 +142,19 @@ cargo +nightly fuzz run fuzz_from_menu_index -- -max_total_time=60
 
 ```
 src/
-  lib.rs        — module declarations
-  product.rs    — Product enum + parsing helpers
-  plan.rs       — RemovalPlan (pure data; no I/O)
-  executor.rs   — Executor trait + LiveExecutor + StubExecutor
-  menu.rs       — accessible CLI fallback menu
-  ui.rs         — Win32 dialog UI + CLI fallback orchestration
-  main.rs       — entry point
+  lib.rs        - module declarations
+  product.rs    - Product enum + parsing helpers
+  plan.rs       - RemovalPlan (pure data; no I/O)
+  executor.rs   - Executor trait + LiveExecutor + StubExecutor
+  menu.rs       - accessible CLI fallback menu
+  ui.rs         - Win32 dialog UI + CLI fallback orchestration
+  main.rs       - entry point
+
+docs/
+  WixenUninstallerHelp.html - installed HTML help guide
 
 tests/
-  integration.rs — end-to-end pipeline tests
+  integration.rs - end-to-end pipeline tests
 
 fuzz/
   fuzz_targets/
@@ -154,7 +162,7 @@ fuzz/
     fuzz_from_slug.rs
     fuzz_from_menu_index.rs
 
-wixen_uninstall.iss  — Inno Setup packaging script
+wixen_uninstall.iss  - Inno Setup packaging script
 ```
 
 ---

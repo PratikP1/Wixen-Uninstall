@@ -1,4 +1,4 @@
-//! Accessible CLI menu — keyboard-only, screen-reader friendly.
+//! Accessible CLI menu - keyboard-only, screen-reader friendly.
 //!
 //! Author: PratikP1
 //!
@@ -12,7 +12,7 @@ use std::io::{self, BufRead, Write};
 // ─── Prompt text ─────────────────────────────────────────────────────────────
 
 /// The header printed above the product list.
-pub const HEADER: &str = "Wixen Uninstaller — select a product to remove:";
+pub const HEADER: &str = "Wixen Uninstaller - select a product to remove:";
 
 /// The prompt shown after the list.
 pub const PROMPT: &str = "Enter number and press Enter (or 'q' to quit): ";
@@ -78,7 +78,7 @@ pub fn run_menu(input: &mut dyn BufRead, output: &mut dyn Write) -> io::Result<O
         let mut line = String::new();
         let bytes_read = input.read_line(&mut line)?;
 
-        // EOF — treat like quit.
+        // EOF - treat like quit.
         if bytes_read == 0 {
             return Ok(None);
         }
