@@ -44,8 +44,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=commandline
 
-; Accessibility: ensure high-DPI awareness so screen magnifiers work.
-SetupIconFile=
+; Accessibility: keep the wizard simple and screen-reader friendly.
 ; AppReadmeFile points to the README so it is shown in the wizard.
 AppReadmeFile=..\README.md
 
