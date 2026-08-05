@@ -19,3 +19,4 @@ pub mod resume;
 pub mod stats_ini;
 pub mod ui;
 pub mod uninstall;
+pub mod vendor;

@@ -13,6 +13,18 @@
 
 use crate::{paths::WindowsLocations, product::Product};
 
+/// The registry path segment that marks an Add/Remove Programs entry.
+const UNINSTALL_KEY_MARKER: &str = r"\Uninstall\";
+
+fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    let needle = needle.as_bytes();
+    !needle.is_empty()
+        && haystack
+            .as_bytes()
+            .windows(needle.len())
+            .any(|window| window.eq_ignore_ascii_case(needle))
+}
+
 // ─── Domain types ────────────────────────────────────────────────────────────
 
 /// A Windows registry key (or value) that should be deleted.
@@ -164,6 +176,19 @@ impl RemovalPlan {
                 .map(ScheduledTask::new)
                 .collect(),
         }
+    }
+
+    /// The registry keys under `…\Uninstall\…`, whose values carry the
+    /// vendor's own uninstall command.
+    ///
+    /// Probed before deletion so the product can be asked to remove itself —
+    /// the one route past self-protection that does not require Safe Mode,
+    /// since a product cannot block its own uninstaller.
+    pub fn uninstall_keys(&self) -> impl Iterator<Item = &str> {
+        self.registry_entries
+            .iter()
+            .map(|entry| entry.key_path.as_str())
+            .filter(|key| contains_ignore_ascii_case(key, UNINSTALL_KEY_MARKER))
     }
 
     /// Total number of removal actions.
@@ -673,6 +698,44 @@ mod tests {
         };
         assert_eq!(single.action_count(), 1);
         assert!(single.is_non_empty());
+    }
+
+    #[test]
+    fn uninstall_keys_are_the_add_remove_programs_entries() {
+        for &product in Product::all() {
+            let plan = RemovalPlan::for_product(product);
+            let keys: Vec<&str> = plan.uninstall_keys().collect();
+
+            assert!(
+                !keys.is_empty(),
+                "{product} should expose at least one uninstall key to probe"
+            );
+            for key in &keys {
+                assert!(
+                    key.contains(r"\Uninstall\"),
+                    "{product}: {key} is not an Add/Remove Programs entry"
+                );
+            }
+            // A service key or a software root must not be mistaken for one.
+            assert!(
+                plan.registry_entries
+                    .iter()
+                    .any(|entry| !entry.key_path.contains(r"\Uninstall\")),
+                "{product}: the plan should also carry non-uninstall keys"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plan_with_no_uninstall_keys_yields_none() {
+        let plan = RemovalPlan {
+            product: Product::McAfee,
+            registry_entries: vec![RegistryEntry::key(r"HKLM\SOFTWARE\McAfee")],
+            file_paths: Vec::new(),
+            services: Vec::new(),
+            scheduled_tasks: Vec::new(),
+        };
+        assert_eq!(plan.uninstall_keys().count(), 0);
     }
 
     #[test]

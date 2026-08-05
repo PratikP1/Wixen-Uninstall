@@ -97,19 +97,14 @@ impl UninstallCommand {
     }
 
     /// `true` when the command already runs unattended.
+    ///
+    /// Wixen runs a vendor uninstaller only when this holds: appending a
+    /// *guessed* silent switch could leave the uninstaller blocking on a
+    /// dialog, which is precisely the accessibility trap this feature removes.
+    /// So the policy is to prefer `QuietUninstallString`, normalize MSI to a
+    /// silent form, and otherwise decline to run it — never to guess.
     pub fn is_silent(&self) -> bool {
         self.args.iter().any(|arg| is_known_silent_switch(arg))
-    }
-
-    /// The same command with `switch` appended, unless it is already silent.
-    ///
-    /// Used for a bare `UninstallString` that would otherwise stop on a dialog —
-    /// exactly the accessibility trap this whole feature exists to avoid.
-    pub fn ensure_silent_with(mut self, switch: &str) -> Self {
-        if !self.is_silent() {
-            self.args.push(switch.to_owned());
-        }
-        self
     }
 
     fn silent_msi_uninstall(product_code: &str) -> Self {
@@ -369,36 +364,6 @@ mod tests {
                 .unwrap()
                 .is_silent()
         );
-    }
-
-    // ── ensure_silent_with ───────────────────────────────────────────────────
-
-    #[test]
-    fn a_switch_is_appended_only_when_not_already_silent() {
-        let bare = UninstallCommand::parse(r"C:\x\uninst.exe /remove")
-            .unwrap()
-            .ensure_silent_with("/S");
-        assert_eq!(bare.args, vec!["/remove", "/S"]);
-    }
-
-    #[test]
-    fn an_already_silent_command_is_left_untouched() {
-        let already = UninstallCommand::parse(r"C:\x\uninst.exe /S")
-            .unwrap()
-            .ensure_silent_with("/S");
-        assert_eq!(
-            already.args,
-            vec!["/S"],
-            "adding a second /S could confuse the uninstaller"
-        );
-    }
-
-    #[test]
-    fn ensuring_silence_makes_the_command_report_silent() {
-        let command = UninstallCommand::parse(r"C:\x\uninst.exe")
-            .unwrap()
-            .ensure_silent_with("/quiet");
-        assert!(command.is_silent());
     }
 
     // ── quoted arguments ─────────────────────────────────────────────────────
