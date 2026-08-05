@@ -329,7 +329,7 @@ impl Executor for LiveExecutor {
 // ─── Windows implementation ───────────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
-mod windows {
+pub(crate) mod windows {
     use super::{ActionOutcome, classify_windows_command_result};
     use crate::plan::{FilePath, RegistryEntry, ScheduledTask, ServiceEntry};
     use std::process::Command;
@@ -337,7 +337,7 @@ mod windows {
     /// Resolve a system tool by absolute path.  Invoking `reg.exe` by bare name
     /// would search PATH, which an attacker who controls a PATH entry could
     /// use to have this elevated process run their binary instead.
-    fn system_tool_path(executable_name: &str) -> std::io::Result<std::path::PathBuf> {
+    pub(crate) fn system_tool_path(executable_name: &str) -> std::io::Result<std::path::PathBuf> {
         let system_root = std::env::var_os("SystemRoot").ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,

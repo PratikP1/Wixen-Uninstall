@@ -10,6 +10,7 @@
 pub mod elevation;
 pub mod escalation;
 pub mod executor;
+pub mod forceful;
 pub mod menu;
 pub mod paths;
 pub mod plan;
