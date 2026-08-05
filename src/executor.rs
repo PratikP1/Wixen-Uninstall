@@ -244,7 +244,10 @@ mod windows {
                 o.status.success(),
                 &o.stdout,
                 &o.stderr,
-                &["unable to find the specified registry key or value", "unable to find"],
+                &[
+                    "unable to find the specified registry key or value",
+                    "unable to find",
+                ],
             ),
             Err(e) => ActionOutcome::Error(e.to_string()),
         }
