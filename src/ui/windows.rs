@@ -78,7 +78,11 @@ pub fn confirm_plan(plan: &RemovalPlan) -> io::Result<bool> {
     // Focus starts on Cancel: pressing Enter by reflex must not begin an
     // irreversible removal.
     .default_button(IDCANCEL)
-    .details("Show what will be removed", &plan_details(plan))
+    .details(
+        "Show what will be removed",
+        "Hide what will be removed",
+        &plan_details(plan),
+    )
     .footer(HELP_FOOTER)
     .show()?;
 
@@ -156,7 +160,7 @@ pub fn show_report(report: &ExecutionReport) -> io::Result<()> {
         .common_buttons(TDCBF_CLOSE);
 
     if let Some(details) = report_details(report) {
-        dialog = dialog.details("Show details", &details);
+        dialog = dialog.details("Show details", "Hide details", &details);
     }
 
     dialog = match report_footer(report) {

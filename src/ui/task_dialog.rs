@@ -151,6 +151,9 @@ pub struct Dialog {
     common_buttons: u32,
     default_button: i32,
     expanded_information: Option<Vec<u16>>,
+    /// Label while the pane is collapsed, i.e. the invitation to expand.
+    collapsed_control_text: Option<Vec<u16>>,
+    /// Label while the pane is expanded, i.e. the invitation to collapse.
     expanded_control_text: Option<Vec<u16>>,
     footer: Option<Vec<u16>>,
     allow_cancel: bool,
@@ -168,6 +171,7 @@ impl Dialog {
             common_buttons: 0,
             default_button: 0,
             expanded_information: None,
+            collapsed_control_text: None,
             expanded_control_text: None,
             footer: None,
             allow_cancel: true,
@@ -206,8 +210,15 @@ impl Dialog {
     }
 
     /// Content for the collapsible details pane.
-    pub fn details(mut self, label: &str, information: &str) -> Self {
-        self.expanded_control_text = Some(to_wide(label));
+    ///
+    /// Windows shows `expand_label` while the pane is closed and
+    /// `collapse_label` while it is open, so they must differ: a button that
+    /// still reads "Show details" once the details are showing tells a screen
+    /// reader user the opposite of the truth.  Leaving the expanded label unset
+    /// does not help — Windows then copies the collapsed one.
+    pub fn details(mut self, expand_label: &str, collapse_label: &str, information: &str) -> Self {
+        self.collapsed_control_text = Some(to_wide(expand_label));
+        self.expanded_control_text = Some(to_wide(collapse_label));
         self.expanded_information = Some(to_wide(information));
         self
     }
@@ -268,7 +279,7 @@ impl Dialog {
             psz_verification_text: std::ptr::null(),
             psz_expanded_information: optional_ptr(self.expanded_information.as_ref()),
             psz_expanded_control_text: optional_ptr(self.expanded_control_text.as_ref()),
-            psz_collapsed_control_text: optional_ptr(self.expanded_control_text.as_ref()),
+            psz_collapsed_control_text: optional_ptr(self.collapsed_control_text.as_ref()),
             psz_footer_icon: std::ptr::null(),
             psz_footer: optional_ptr(self.footer.as_ref()),
             pfn_callback: callback,
@@ -595,10 +606,28 @@ mod tests {
         let plain = Dialog::new("t", "m", "c");
         assert_eq!(plain.flags() & TDF_EXPAND_FOOTER_AREA, 0);
 
-        let detailed = Dialog::new("t", "m", "c").details("Show details", "everything");
+        let detailed =
+            Dialog::new("t", "m", "c").details("Show details", "Hide details", "everything");
         assert!(detailed.flags() & TDF_EXPAND_FOOTER_AREA != 0);
         assert!(detailed.expanded_information.is_some());
-        assert!(detailed.expanded_control_text.is_some());
+    }
+
+    #[test]
+    fn the_expando_label_changes_with_the_pane_state() {
+        let dialog = Dialog::new("t", "m", "c").details("Show details", "Hide details", "body");
+
+        assert_eq!(
+            String::from_utf16_lossy(dialog.collapsed_control_text.as_ref().unwrap()),
+            "Show details\0"
+        );
+        assert_eq!(
+            String::from_utf16_lossy(dialog.expanded_control_text.as_ref().unwrap()),
+            "Hide details\0"
+        );
+        assert_ne!(
+            dialog.collapsed_control_text, dialog.expanded_control_text,
+            "a button that still says \"Show\" while showing is worse than no label"
+        );
     }
 
     #[test]

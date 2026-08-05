@@ -34,9 +34,13 @@ fn main() {
 
     // `/MANIFESTUAC:NO` stops the linker generating its own trustInfo block,
     // which would collide with the requestedExecutionLevel in our manifest.
+    //
+    // The path is quoted because a checkout under, say, `C:\Users\Jane Doe\`
+    // reaches the linker through a response file when the command line grows
+    // long, and there the spaces would split the option in two.
     println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
     println!(
-        "cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}",
+        "cargo:rustc-link-arg-bins=/MANIFESTINPUT:\"{}\"",
         manifest.display()
     );
     println!("cargo:rustc-link-arg-bins=/MANIFESTUAC:NO");
