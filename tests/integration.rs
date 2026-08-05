@@ -97,12 +97,87 @@ fn all_errors_are_collected_and_not_short_circuited() {
     let stub = StubExecutor::all_error("simulated failure");
     let report = execute(&plan, &stub);
 
+    // Driver images are skipped rather than attempted once their service fails
+    // to go away, so every action ends up in exactly one of the two lists.
     assert_eq!(
-        report.errors.len(),
+        report.errors.len() + report.warnings.len(),
         total,
-        "Every action should produce an error entry"
+        "Every action should be accounted for as an error or a skip"
     );
+    assert!(!report.errors.is_empty());
     assert_eq!(report.actions_succeeded, 0);
+    assert!(!report.fully_succeeded());
+}
+
+// ─── Boot safety ─────────────────────────────────────────────────────────────
+
+#[test]
+fn no_driver_image_is_deleted_when_service_removal_fails() {
+    // The failure mode this guards against: self-protection blocks `sc delete`,
+    // the driver stays registered, its image is deleted anyway, and Windows
+    // will not boot.
+    for &product in Product::all() {
+        let plan = RemovalPlan::for_product(product);
+        let stub = StubExecutor::all_error("Access is denied");
+        let report = execute(&plan, &stub);
+
+        let guarded_files = plan
+            .file_paths
+            .iter()
+            .filter(|file| file.guard_service.is_some())
+            .count();
+
+        assert_eq!(
+            report.warnings.len(),
+            guarded_files,
+            "{product}: every guarded driver should be skipped, not deleted"
+        );
+    }
+}
+
+#[test]
+fn driver_images_are_deleted_once_their_services_are_gone() {
+    for &product in Product::all() {
+        let plan = RemovalPlan::for_product(product);
+        let report = execute(&plan, &StubExecutor::all_removed());
+
+        assert!(
+            report.warnings.is_empty(),
+            "{product}: nothing should be skipped when every service is removed: {:?}",
+            report.warnings
+        );
+        assert_eq!(report.actions_succeeded, plan.action_count());
+    }
+}
+
+// ─── Path safety ─────────────────────────────────────────────────────────────
+
+#[test]
+fn no_plan_targets_a_system_directory() {
+    let never_delete = [
+        r"C:\",
+        r"C:\Windows",
+        r"C:\Windows\System32",
+        r"C:\Windows\System32\drivers",
+        r"C:\Program Files",
+        r"C:\Program Files (x86)",
+        r"C:\Program Files\Common Files",
+        r"C:\ProgramData",
+        r"C:\Users",
+    ];
+
+    for &product in Product::all() {
+        for file in &RemovalPlan::for_product(product).file_paths {
+            let target = file.path.trim_end_matches('\\');
+            assert!(
+                !never_delete.iter().any(|protected| protected
+                    .trim_end_matches('\\')
+                    .eq_ignore_ascii_case(target)),
+                "{product}: plan would delete the system directory {}",
+                file.path
+            );
+        }
+    }
 }
 
 // ─── Menu → product → plan pipeline ─────────────────────────────────────────

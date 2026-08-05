@@ -15,10 +15,14 @@ use crate::plan::{FilePath, RegistryEntry, RemovalPlan, ScheduledTask, ServiceEn
 pub enum ActionOutcome {
     Removed,
     NotFound,
+    /// Deliberately not attempted, because doing so would have been unsafe.
+    Skipped(String),
     Error(String),
 }
 
 impl ActionOutcome {
+    /// `true` when the artifact is gone: either we removed it, or it was never
+    /// there.  Removal is idempotent, so both are wins.
     pub fn is_success(&self) -> bool {
         matches!(self, ActionOutcome::Removed | ActionOutcome::NotFound)
     }
@@ -30,12 +34,20 @@ pub struct ExecutionReport {
     pub product_name: String,
     pub actions_attempted: usize,
     pub actions_succeeded: usize,
+    /// Actions refused for safety, with the reason. Not failures, but the
+    /// cleanup is incomplete and the user has to be told.
+    pub warnings: Vec<String>,
     pub errors: Vec<String>,
 }
 
 impl ExecutionReport {
+    /// `true` only when every action either succeeded or was already done.
     pub fn fully_succeeded(&self) -> bool {
-        self.errors.is_empty()
+        self.errors.is_empty() && self.warnings.is_empty()
+    }
+
+    pub fn actions_skipped(&self) -> usize {
+        self.warnings.len()
     }
 
     pub fn success_rate(&self) -> f64 {
@@ -46,18 +58,22 @@ impl ExecutionReport {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn system_tool_path(executable_name: &str) -> std::io::Result<std::path::PathBuf> {
-    let system_root = std::env::var_os("SystemRoot").ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("SystemRoot is not set; cannot locate {executable_name}"),
-        )
-    })?;
+/// Running totals while a plan executes.
+#[derive(Default)]
+struct Tally {
+    succeeded: usize,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+}
 
-    Ok(std::path::PathBuf::from(system_root)
-        .join("System32")
-        .join(executable_name))
+impl Tally {
+    fn record(&mut self, outcome: ActionOutcome, label: &str) {
+        match outcome {
+            ActionOutcome::Removed | ActionOutcome::NotFound => self.succeeded += 1,
+            ActionOutcome::Skipped(reason) => self.warnings.push(format!("{label}: {reason}")),
+            ActionOutcome::Error(message) => self.errors.push(format!("{label}: {message}")),
+        }
+    }
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -122,41 +138,56 @@ pub trait Executor {
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
-/// Execute `plan` using the provided `executor` and return a report.
-pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
-    let mut succeeded = 0usize;
-    let mut errors: Vec<String> = Vec::new();
+/// Explains why a driver image was left on disk.
+fn driver_guard_reason(service: &str) -> String {
+    format!(
+        "left in place because the {service} service could not be removed - \
+         deleting a registered driver's file can stop Windows from starting. \
+         Reboot into Safe Mode and run Wixen again."
+    )
+}
 
-    let mut handle = |outcome: ActionOutcome, label: &str| {
-        if outcome.is_success() {
-            succeeded += 1;
-        } else if let ActionOutcome::Error(msg) = outcome {
-            errors.push(format!("{label}: {msg}"));
-        }
-    };
+/// Execute `plan` using the provided `executor` and return a report.
+///
+/// Ordering is deliberate and load-bearing.  Scheduled tasks go first so a
+/// self-repair task cannot reinstate what we are about to remove; services
+/// next, so their file handles are released and — critically — so a driver's
+/// registration is gone before its image is deleted; then files; then the
+/// registry, which is what makes the removal invisible to Windows.
+pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
+    let mut tally = Tally::default();
 
     for task in &plan.scheduled_tasks {
-        let o = executor.delete_scheduled_task(task);
-        handle(o, &task.task_path);
+        tally.record(executor.delete_scheduled_task(task), &task.task_path);
     }
-    for svc in &plan.services {
-        let o = executor.stop_and_remove_service(svc);
-        handle(o, &svc.name);
+
+    let mut removed_services: Vec<&str> = Vec::new();
+    for service in &plan.services {
+        let outcome = executor.stop_and_remove_service(service);
+        if outcome.is_success() {
+            removed_services.push(&service.name);
+        }
+        tally.record(outcome, &service.name);
     }
-    for fp in &plan.file_paths {
-        let o = executor.remove_file_path(fp);
-        handle(o, &fp.path);
+
+    for file in &plan.file_paths {
+        let outcome = match file.blocking_guard(&removed_services) {
+            Some(service) => ActionOutcome::Skipped(driver_guard_reason(service)),
+            None => executor.remove_file_path(file),
+        };
+        tally.record(outcome, &file.path);
     }
+
     for entry in &plan.registry_entries {
-        let o = executor.remove_registry_entry(entry);
-        handle(o, &entry.key_path);
+        tally.record(executor.remove_registry_entry(entry), &entry.key_path);
     }
 
     ExecutionReport {
         product_name: plan.product.display_name().to_owned(),
         actions_attempted: plan.action_count(),
-        actions_succeeded: succeeded,
-        errors,
+        actions_succeeded: tally.succeeded,
+        warnings: tally.warnings,
+        errors: tally.errors,
     }
 }
 
@@ -222,9 +253,25 @@ impl Executor for LiveExecutor {
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use super::{ActionOutcome, classify_windows_command_result, system_tool_path};
+    use super::{ActionOutcome, classify_windows_command_result};
     use crate::plan::{FilePath, RegistryEntry, ScheduledTask, ServiceEntry};
     use std::process::Command;
+
+    /// Resolve a system tool by absolute path.  Invoking `reg.exe` by bare name
+    /// would search PATH, which an attacker who controls a PATH entry could
+    /// use to have this elevated process run their binary instead.
+    fn system_tool_path(executable_name: &str) -> std::io::Result<std::path::PathBuf> {
+        let system_root = std::env::var_os("SystemRoot").ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("SystemRoot is not set; cannot locate {executable_name}"),
+            )
+        })?;
+
+        Ok(std::path::PathBuf::from(system_root)
+            .join("System32")
+            .join(executable_name))
+    }
 
     pub fn delete_registry_entry(entry: &RegistryEntry) -> ActionOutcome {
         let reg = match system_tool_path("reg.exe") {
@@ -453,6 +500,140 @@ mod tests {
         assert!(!ActionOutcome::Error("oops".into()).is_success());
     }
 
+    #[test]
+    fn skipped_is_not_success() {
+        assert!(!ActionOutcome::Skipped("guarded".into()).is_success());
+    }
+
+    #[test]
+    fn actions_skipped_counts_every_warning() {
+        let mut report = ExecutionReport {
+            product_name: "test".to_owned(),
+            actions_attempted: 3,
+            actions_succeeded: 0,
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        };
+        assert_eq!(report.actions_skipped(), 0);
+
+        report.warnings.push("one".to_owned());
+        assert_eq!(report.actions_skipped(), 1);
+
+        report.warnings.push("two".to_owned());
+        assert_eq!(report.actions_skipped(), 2);
+    }
+
+    #[test]
+    fn success_rate_is_one_for_an_empty_plan() {
+        let report = ExecutionReport {
+            product_name: "test".to_owned(),
+            actions_attempted: 0,
+            actions_succeeded: 0,
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        };
+        assert_eq!(report.success_rate(), 1.0);
+    }
+
+    // ── Driver guard: the boot-safety invariant ──────────────────────────────
+
+    /// Executor that fails only the named service, so we can reproduce the
+    /// real-world case: self-protection blocks `sc delete`, and deleting the
+    /// driver image anyway would leave Windows unable to boot.
+    struct ServiceFailsExecutor {
+        failing_service: &'static str,
+        deleted_files: Mutex<Vec<String>>,
+    }
+
+    impl Executor for ServiceFailsExecutor {
+        fn remove_registry_entry(&self, _: &RegistryEntry) -> ActionOutcome {
+            ActionOutcome::Removed
+        }
+
+        fn remove_file_path(&self, path: &FilePath) -> ActionOutcome {
+            self.deleted_files.lock().unwrap().push(path.path.clone());
+            ActionOutcome::Removed
+        }
+
+        fn stop_and_remove_service(&self, service: &ServiceEntry) -> ActionOutcome {
+            if service.name == self.failing_service {
+                ActionOutcome::Error("Access is denied".to_owned())
+            } else {
+                ActionOutcome::Removed
+            }
+        }
+
+        fn delete_scheduled_task(&self, _: &ScheduledTask) -> ActionOutcome {
+            ActionOutcome::Removed
+        }
+    }
+
+    #[test]
+    fn driver_image_is_not_deleted_when_its_service_survives() {
+        let plan = RemovalPlan::for_product(Product::Avast);
+        let executor = ServiceFailsExecutor {
+            failing_service: "aswSP",
+            deleted_files: Mutex::new(Vec::new()),
+        };
+
+        let report = execute(&plan, &executor);
+        let deleted = executor.deleted_files.lock().unwrap().clone();
+
+        assert!(
+            !deleted.iter().any(|path| path.ends_with("aswSP.sys")),
+            "the image of a still-registered driver must survive: {deleted:?}"
+        );
+        assert!(
+            deleted.iter().any(|path| path.ends_with("aswSnx.sys")),
+            "drivers whose service was removed should still be deleted: {deleted:?}"
+        );
+        assert!(
+            report.warnings.iter().any(|w| w.contains("aswSP.sys")),
+            "the skipped driver must be reported: {:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    fn every_driver_is_deleted_when_all_services_are_removed() {
+        let plan = RemovalPlan::for_product(Product::Avast);
+        let executor = ServiceFailsExecutor {
+            failing_service: "no-such-service",
+            deleted_files: Mutex::new(Vec::new()),
+        };
+
+        let report = execute(&plan, &executor);
+
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert_eq!(
+            executor.deleted_files.lock().unwrap().len(),
+            plan.file_paths.len()
+        );
+    }
+
+    #[test]
+    fn skipped_actions_are_warnings_not_errors() {
+        let plan = RemovalPlan::for_product(Product::Avg);
+        let executor = ServiceFailsExecutor {
+            failing_service: "avgSP",
+            deleted_files: Mutex::new(Vec::new()),
+        };
+
+        let report = execute(&plan, &executor);
+
+        assert_eq!(report.actions_skipped(), 1);
+        assert_eq!(report.errors.len(), 1, "only the service itself failed");
+        assert!(!report.fully_succeeded());
+    }
+
+    #[test]
+    fn guard_reason_explains_the_boot_risk_and_the_fix() {
+        let reason = driver_guard_reason("aswSP");
+        assert!(reason.contains("aswSP"));
+        assert!(reason.contains("Windows from starting"));
+        assert!(reason.contains("Safe Mode"));
+    }
+
     // ── ExecutionReport helpers ───────────────────────────────────────────────
 
     #[test]
@@ -585,6 +766,8 @@ mod tests {
             services: vec![ServiceEntry::new("AvastSvc")],
             scheduled_tasks: vec![ScheduledTask::new(r"\AVAST Software\Avast\Overseer")],
         };
+        // Services must precede files so a driver's registration is gone before
+        // its image is; the assertion below is what keeps that ordering honest.
         let executor = RecordingExecutor::new();
 
         let report = execute(&plan, &executor);

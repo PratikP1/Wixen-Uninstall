@@ -5,8 +5,13 @@
 //! The plan is built from static knowledge of where supported security suites
 //! store their files, registry keys, services, and scheduled tasks.  Nothing
 //! is deleted here; the executor module consumes the plan.
+//!
+//! File templates use the placeholders defined in [`crate::paths`] rather than
+//! a literal `C:\`, and every expanded path is validated before it enters the
+//! plan.  A template that cannot be resolved safely is dropped, and the unit
+//! tests assert that no shipped template ever is.
 
-use crate::product::Product;
+use crate::{paths::WindowsLocations, product::Product};
 
 // ─── Domain types ────────────────────────────────────────────────────────────
 
@@ -44,6 +49,12 @@ pub struct FilePath {
     pub path: String,
     /// When `true` the entry is a directory; recursive deletion is used.
     pub is_dir: bool,
+    /// Set for kernel driver images: the service that loads this file.
+    ///
+    /// Windows refuses to boot when a registered boot-start or system-start
+    /// driver's image is missing, so the executor must not delete the file
+    /// until that service has been removed.  See [`FilePath::blocking_guard`].
+    pub guard_service: Option<String>,
 }
 
 impl FilePath {
@@ -51,6 +62,7 @@ impl FilePath {
         Self {
             path: path.into(),
             is_dir: false,
+            guard_service: None,
         }
     }
 
@@ -58,7 +70,25 @@ impl FilePath {
         Self {
             path: path.into(),
             is_dir: true,
+            guard_service: None,
         }
+    }
+
+    /// A kernel driver image that is only safe to delete once `service` is gone.
+    pub fn driver(path: impl Into<String>, service: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            is_dir: false,
+            guard_service: Some(service.into()),
+        }
+    }
+
+    /// The service that still blocks deletion, given the set of services the
+    /// executor has already removed.
+    pub fn blocking_guard<'a>(&'a self, removed_services: &[&str]) -> Option<&'a str> {
+        self.guard_service
+            .as_deref()
+            .filter(|service| !removed_services.contains(service))
     }
 }
 
@@ -102,13 +132,37 @@ pub struct RemovalPlan {
 }
 
 impl RemovalPlan {
-    /// Build the complete removal plan for `product`.
+    /// Build the complete removal plan for `product` on this machine.
     pub fn for_product(product: Product) -> Self {
-        match product {
-            Product::McAfee => mcafee_plan(),
-            Product::Norton => norton_plan(),
-            Product::Avast => avast_plan(),
-            Product::Avg => avg_plan(),
+        Self::for_product_at(product, &WindowsLocations::from_env())
+    }
+
+    /// Build the plan against explicit locations, so tests can exercise
+    /// machines whose Windows does not live on C:.
+    pub fn for_product_at(product: Product, locations: &WindowsLocations) -> Self {
+        let templates = templates_for(product);
+
+        Self {
+            product,
+            registry_entries: templates
+                .registry_keys
+                .iter()
+                .copied()
+                .map(RegistryEntry::key)
+                .collect(),
+            file_paths: resolve_file_paths(templates, locations),
+            services: templates
+                .services
+                .iter()
+                .copied()
+                .map(ServiceEntry::new)
+                .collect(),
+            scheduled_tasks: templates
+                .scheduled_tasks
+                .iter()
+                .copied()
+                .map(ScheduledTask::new)
+                .collect(),
         }
     }
 
@@ -126,359 +180,418 @@ impl RemovalPlan {
     }
 }
 
-// ─── McAfee knowledge base ───────────────────────────────────────────────────
+// ─── Static product knowledge ────────────────────────────────────────────────
 
-fn mcafee_plan() -> RemovalPlan {
-    RemovalPlan {
-        product: Product::McAfee,
-        registry_entries: vec![
-            RegistryEntry::key(r"HKLM\SOFTWARE\McAfee"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\McAfee"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\McShield"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\McAfee WebAdvisor"),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee Total Protection",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee LiveSafe",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee WebAdvisor",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\McAfee WebAdvisor",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee SiteAdvisor",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\McAfee SiteAdvisor",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee.WPS",
-            ),
-            RegistryEntry::key(r"HKCU\SOFTWARE\McAfee"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\McAfee.com"),
-        ],
-        file_paths: vec![
-            FilePath::dir(r"C:\Program Files\McAfee"),
-            FilePath::dir(r"C:\Program Files (x86)\McAfee"),
-            FilePath::dir(r"C:\Program Files\McAfee.com"),
-            FilePath::dir(r"C:\Program Files (x86)\McAfee.com"),
-            FilePath::dir(r"C:\Program Files\McAfee\WebAdvisor"),
-            FilePath::dir(r"C:\Program Files (x86)\McAfee\WebAdvisor"),
-            FilePath::dir(r"C:\Program Files (x86)\McAfee\SiteAdvisor"),
-            FilePath::dir(r"C:\ProgramData\McAfee"),
-            FilePath::dir(r"C:\Users\All Users\McAfee"),
-            FilePath::dir(r"C:\Program Files\Common Files\McAfee"),
-            FilePath::dir(r"C:\Program Files (x86)\Common Files\McAfee"),
-            FilePath::file(r"C:\Windows\System32\drivers\mfehidk.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\mfefirek.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\mfewfpk.sys"),
-        ],
-        services: vec![
-            ServiceEntry::new("McShield"),
-            ServiceEntry::new("McAfeeEngineService"),
-            ServiceEntry::new("McAfee WebAdvisor"),
-            ServiceEntry::new("mfemms"),
-            ServiceEntry::new("mfefire"),
-        ],
-        scheduled_tasks: vec![
-            ScheduledTask::new(r"\McAfee\McAfee Auto Maintenance"),
-            ScheduledTask::new(r"\McAfee\McAfeeLogon"),
-            ScheduledTask::new(r"\McAfee\McAfee WebAdvisor"),
-        ],
+/// A kernel driver image paired with the service that loads it.
+///
+/// The pairing is what makes the guard in [`FilePath::driver`] possible: we can
+/// only delete `aswSP.sys` once the `aswSP` service is gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DriverService {
+    pub image_template: &'static str,
+    pub service: &'static str,
+}
+
+impl DriverService {
+    const fn new(image_template: &'static str, service: &'static str) -> Self {
+        Self {
+            image_template,
+            service,
+        }
     }
 }
+
+/// The unresolved knowledge base for one product.
+struct ProductTemplates {
+    registry_keys: &'static [&'static str],
+    directories: &'static [&'static str],
+    drivers: &'static [DriverService],
+    services: &'static [&'static str],
+    scheduled_tasks: &'static [&'static str],
+}
+
+fn templates_for(product: Product) -> &'static ProductTemplates {
+    match product {
+        Product::McAfee => &MCAFEE_TEMPLATES,
+        Product::Norton => &NORTON_TEMPLATES,
+        Product::Avast => &AVAST_TEMPLATES,
+        Product::Avg => &AVG_TEMPLATES,
+    }
+}
+
+/// Expand and validate every path template, dropping any that a machine's
+/// layout makes unsafe.  Directories come first so that a failed driver guard
+/// never leaves a directory unswept.
+fn resolve_file_paths(templates: &ProductTemplates, locations: &WindowsLocations) -> Vec<FilePath> {
+    let directories = templates
+        .directories
+        .iter()
+        .filter_map(|template| Some(FilePath::dir(locations.resolve(template).ok()?)));
+
+    let drivers = templates.drivers.iter().filter_map(|driver| {
+        Some(FilePath::driver(
+            locations.resolve(driver.image_template).ok()?,
+            driver.service,
+        ))
+    });
+
+    directories.chain(drivers).collect()
+}
+
+// ─── McAfee knowledge base ───────────────────────────────────────────────────
+
+const MCAFEE_TEMPLATES: ProductTemplates = ProductTemplates {
+    registry_keys: &[
+        r"HKLM\SOFTWARE\McAfee",
+        r"HKLM\SOFTWARE\WOW6432Node\McAfee",
+        r"HKLM\SOFTWARE\McAfee.com",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\McShield",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\McAfee WebAdvisor",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee Total Protection",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee LiveSafe",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee WebAdvisor",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\McAfee WebAdvisor",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee SiteAdvisor",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\McAfee SiteAdvisor",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee.WPS",
+        r"HKCU\SOFTWARE\McAfee",
+    ],
+    // Parent directories only: recursive deletion sweeps WebAdvisor and
+    // SiteAdvisor sub-folders with them.
+    directories: &[
+        r"{ProgramFiles}\McAfee",
+        r"{ProgramFilesX86}\McAfee",
+        r"{ProgramFiles}\McAfee.com",
+        r"{ProgramFilesX86}\McAfee.com",
+        r"{ProgramFiles}\Common Files\McAfee",
+        r"{ProgramFilesX86}\Common Files\McAfee",
+        r"{ProgramData}\McAfee",
+    ],
+    drivers: &[
+        DriverService::new(r"{SystemRoot}\System32\drivers\mfehidk.sys", "mfehidk"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\mfefirek.sys", "mfefirek"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\mfewfpk.sys", "mfewfpk"),
+    ],
+    services: &[
+        "McShield",
+        "McAfeeEngineService",
+        "McAfee WebAdvisor",
+        "mfemms",
+        "mfefire",
+        "mfehidk",
+        "mfefirek",
+        "mfewfpk",
+    ],
+    scheduled_tasks: &[
+        r"\McAfee\McAfee Auto Maintenance",
+        r"\McAfee\McAfeeLogon",
+        r"\McAfee\McAfee WebAdvisor",
+    ],
+};
 
 // ─── Norton knowledge base ───────────────────────────────────────────────────
 
-fn norton_plan() -> RemovalPlan {
-    RemovalPlan {
-        product: Product::Norton,
-        registry_entries: vec![
-            RegistryEntry::key(r"HKLM\SOFTWARE\Norton"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\Norton"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\Symantec"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\Symantec"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\NortonSecurity"),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton 360",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Secure VPN",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Norton Secure VPN",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities Ultimate",
-            ),
-            RegistryEntry::key(r"HKCU\SOFTWARE\Norton"),
-            RegistryEntry::key(r"HKCU\SOFTWARE\Symantec"),
-        ],
-        file_paths: vec![
-            FilePath::dir(r"C:\Program Files\Norton Security"),
-            FilePath::dir(r"C:\Program Files\Norton 360"),
-            FilePath::dir(r"C:\Program Files\Norton"),
-            FilePath::dir(r"C:\Program Files\Norton Secure VPN"),
-            FilePath::dir(r"C:\Program Files\Norton Utilities"),
-            FilePath::dir(r"C:\Program Files (x86)\Norton Security"),
-            FilePath::dir(r"C:\Program Files (x86)\Norton 360"),
-            FilePath::dir(r"C:\Program Files (x86)\Norton"),
-            FilePath::dir(r"C:\Program Files (x86)\Norton Secure VPN"),
-            FilePath::dir(r"C:\Program Files (x86)\Norton Utilities"),
-            FilePath::dir(r"C:\ProgramData\Norton"),
-            FilePath::dir(r"C:\ProgramData\Symantec"),
-            FilePath::dir(r"C:\Program Files\Common Files\Symantec Shared"),
-            FilePath::dir(r"C:\Program Files (x86)\Common Files\Symantec Shared"),
-            FilePath::file(r"C:\Windows\System32\drivers\NortonSecurity.sys"),
-        ],
-        services: vec![
-            ServiceEntry::new("NortonSecurity"),
-            ServiceEntry::new("NortonSecurityPlatformIDS"),
-            ServiceEntry::new("Symantec Event Manager"),
-            ServiceEntry::new("Symantec Settings Manager"),
-        ],
-        scheduled_tasks: vec![
-            ScheduledTask::new(r"\Norton Security\Norton Error Processor"),
-            ScheduledTask::new(r"\Norton Security\Norton Error Submitter"),
-            ScheduledTask::new(r"\Symantec\Norton Update Manager"),
-        ],
-    }
-}
+const NORTON_TEMPLATES: ProductTemplates = ProductTemplates {
+    registry_keys: &[
+        r"HKLM\SOFTWARE\Norton",
+        r"HKLM\SOFTWARE\WOW6432Node\Norton",
+        r"HKLM\SOFTWARE\Symantec",
+        r"HKLM\SOFTWARE\WOW6432Node\Symantec",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\NortonSecurity",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton 360",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Secure VPN",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Norton Secure VPN",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities Ultimate",
+        r"HKCU\SOFTWARE\Norton",
+        r"HKCU\SOFTWARE\Symantec",
+    ],
+    directories: &[
+        r"{ProgramFiles}\Norton Security",
+        r"{ProgramFiles}\Norton 360",
+        r"{ProgramFiles}\Norton",
+        r"{ProgramFiles}\Norton Secure VPN",
+        r"{ProgramFiles}\Norton Utilities",
+        r"{ProgramFilesX86}\Norton Security",
+        r"{ProgramFilesX86}\Norton 360",
+        r"{ProgramFilesX86}\Norton",
+        r"{ProgramFilesX86}\Norton Secure VPN",
+        r"{ProgramFilesX86}\Norton Utilities",
+        r"{ProgramFiles}\Common Files\Symantec Shared",
+        r"{ProgramFilesX86}\Common Files\Symantec Shared",
+        r"{ProgramData}\Norton",
+        r"{ProgramData}\Symantec",
+    ],
+    drivers: &[DriverService::new(
+        r"{SystemRoot}\System32\drivers\NortonSecurity.sys",
+        "NortonSecurity",
+    )],
+    services: &[
+        "NortonSecurity",
+        "NortonSecurityPlatformIDS",
+        "Symantec Event Manager",
+        "Symantec Settings Manager",
+    ],
+    scheduled_tasks: &[
+        r"\Norton Security\Norton Error Processor",
+        r"\Norton Security\Norton Error Submitter",
+        r"\Symantec\Norton Update Manager",
+    ],
+};
 
 // ─── Avast knowledge base ────────────────────────────────────────────────────
 
-fn avast_plan() -> RemovalPlan {
-    RemovalPlan {
-        product: Product::Avast,
-        registry_entries: vec![
-            RegistryEntry::key(r"HKLM\SOFTWARE\AVAST Software"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\AVAST Software"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\AVAST Software\Avast"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\AvastSvc"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\AvastWscReporter"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswMonFlt"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswSnx"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswSP"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswVmm"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswRdr2"),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Antivirus",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Secure Browser",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Avast Secure Browser",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Cleanup",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Cleanup Premium",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Driver Updater",
-            ),
-            RegistryEntry::key(r"HKCU\SOFTWARE\AVAST Software"),
-        ],
-        file_paths: vec![
-            FilePath::dir(r"C:\Program Files\AVAST Software"),
-            FilePath::dir(r"C:\Program Files\AVAST Software\Avast"),
-            FilePath::dir(r"C:\Program Files (x86)\AVAST Software"),
-            FilePath::dir(r"C:\Program Files (x86)\AVAST Software\Avast"),
-            FilePath::dir(r"C:\Program Files (x86)\AVAST Software\Browser"),
-            FilePath::dir(r"C:\Program Files\Common Files\Avast Software"),
-            FilePath::dir(r"C:\ProgramData\AVAST Software"),
-            FilePath::dir(r"C:\ProgramData\AVAST Software\Avast\log"),
-            FilePath::dir(r"C:\ProgramData\AVAST Software\Avast\setup"),
-            FilePath::file(r"C:\Windows\System32\drivers\aswSP.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\aswSnx.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\aswMonFlt.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\aswVmm.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\aswRdr2.sys"),
-        ],
-        services: vec![
-            ServiceEntry::new("AvastSvc"),
-            ServiceEntry::new("AvastWscReporter"),
-            ServiceEntry::new("aswbIDSAgent"),
-            ServiceEntry::new("aswMonFlt"),
-            ServiceEntry::new("aswSnx"),
-            ServiceEntry::new("aswSP"),
-            ServiceEntry::new("aswVmm"),
-            ServiceEntry::new("aswRdr2"),
-        ],
-        scheduled_tasks: vec![
-            ScheduledTask::new(r"\AVAST Software\Avast\Overseer"),
-            ScheduledTask::new(r"\AVAST Software\Avast\AutoRepair"),
-            ScheduledTask::new(r"\AVAST Software\Avast\Periodic Scan"),
-            ScheduledTask::new(r"\AVAST Software\Avast\AvastBrowserUpdate"),
-        ],
-    }
-}
+const AVAST_TEMPLATES: ProductTemplates = ProductTemplates {
+    registry_keys: &[
+        r"HKLM\SOFTWARE\AVAST Software",
+        r"HKLM\SOFTWARE\WOW6432Node\AVAST Software",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\AvastSvc",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\AvastWscReporter",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\aswMonFlt",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\aswSnx",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\aswSP",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\aswVmm",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\aswRdr2",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Antivirus",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Secure Browser",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Avast Secure Browser",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Cleanup",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Cleanup Premium",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Driver Updater",
+        r"HKCU\SOFTWARE\AVAST Software",
+    ],
+    directories: &[
+        r"{ProgramFiles}\AVAST Software",
+        r"{ProgramFilesX86}\AVAST Software",
+        r"{ProgramFiles}\Common Files\Avast Software",
+        r"{ProgramFilesX86}\Common Files\Avast Software",
+        r"{ProgramData}\AVAST Software",
+    ],
+    drivers: &[
+        DriverService::new(r"{SystemRoot}\System32\drivers\aswSP.sys", "aswSP"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\aswSnx.sys", "aswSnx"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\aswMonFlt.sys", "aswMonFlt"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\aswVmm.sys", "aswVmm"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\aswRdr2.sys", "aswRdr2"),
+    ],
+    services: &[
+        "AvastSvc",
+        "AvastWscReporter",
+        "aswbIDSAgent",
+        "aswMonFlt",
+        "aswSnx",
+        "aswSP",
+        "aswVmm",
+        "aswRdr2",
+    ],
+    scheduled_tasks: &[
+        r"\AVAST Software\Avast\Overseer",
+        r"\AVAST Software\Avast\AutoRepair",
+        r"\AVAST Software\Avast\Periodic Scan",
+        r"\AVAST Software\Avast\AvastBrowserUpdate",
+    ],
+};
 
 // ─── AVG knowledge base ──────────────────────────────────────────────────────
 
-fn avg_plan() -> RemovalPlan {
-    RemovalPlan {
-        product: Product::Avg,
-        registry_entries: vec![
-            RegistryEntry::key(r"HKLM\SOFTWARE\AVG"),
-            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\AVG"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgSvc"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgMonFlt"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgSP"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgRdr"),
-            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\AVGIDSDriver"),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Antivirus",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Secure Browser",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\AVG Secure Browser",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG PC TuneUp",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG TuneUp",
-            ),
-            RegistryEntry::key(
-                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Driver Updater",
-            ),
-            RegistryEntry::key(r"HKCU\SOFTWARE\AVG"),
-        ],
-        file_paths: vec![
-            FilePath::dir(r"C:\Program Files\AVG"),
-            FilePath::dir(r"C:\Program Files\AVG\Antivirus"),
-            FilePath::dir(r"C:\Program Files (x86)\AVG"),
-            FilePath::dir(r"C:\ProgramData\AVG"),
-            FilePath::dir(r"C:\ProgramData\AVG\Antivirus"),
-            FilePath::dir(r"C:\ProgramData\TuneUp Software"),
-            FilePath::file(r"C:\Windows\System32\drivers\avgSP.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\avgMonFlt.sys"),
-            FilePath::file(r"C:\Windows\System32\drivers\avgRdr.sys"),
-        ],
-        services: vec![
-            ServiceEntry::new("avgSvc"),
-            ServiceEntry::new("avgMonFlt"),
-            ServiceEntry::new("avgSP"),
-            ServiceEntry::new("avgRdr"),
-            ServiceEntry::new("AVGIDSDriver"),
-        ],
-        scheduled_tasks: vec![
-            ScheduledTask::new(r"\AVG\Antivirus\Overseer"),
-            ScheduledTask::new(r"\AVG\Antivirus\AutoRepair"),
-            ScheduledTask::new(r"\AVG\Antivirus\Periodic Scan"),
-        ],
-    }
-}
+const AVG_TEMPLATES: ProductTemplates = ProductTemplates {
+    registry_keys: &[
+        r"HKLM\SOFTWARE\AVG",
+        r"HKLM\SOFTWARE\WOW6432Node\AVG",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\avgSvc",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\avgMonFlt",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\avgSP",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\avgRdr",
+        r"HKLM\SYSTEM\CurrentControlSet\Services\AVGIDSDriver",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Antivirus",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Secure Browser",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\AVG Secure Browser",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG PC TuneUp",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG TuneUp",
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Driver Updater",
+        r"HKCU\SOFTWARE\AVG",
+    ],
+    directories: &[
+        r"{ProgramFiles}\AVG",
+        r"{ProgramFilesX86}\AVG",
+        r"{ProgramFiles}\Common Files\AVG",
+        r"{ProgramData}\AVG",
+        r"{ProgramData}\TuneUp Software",
+    ],
+    drivers: &[
+        DriverService::new(r"{SystemRoot}\System32\drivers\avgSP.sys", "avgSP"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\avgMonFlt.sys", "avgMonFlt"),
+        DriverService::new(r"{SystemRoot}\System32\drivers\avgRdr.sys", "avgRdr"),
+    ],
+    services: &["avgSvc", "avgMonFlt", "avgSP", "avgRdr", "AVGIDSDriver"],
+    scheduled_tasks: &[
+        r"\AVG\Antivirus\Overseer",
+        r"\AVG\Antivirus\AutoRepair",
+        r"\AVG\Antivirus\Periodic Scan",
+    ],
+};
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::WindowsLocations;
+
+    fn all_templates() -> impl Iterator<Item = &'static ProductTemplates> {
+        Product::all().iter().copied().map(templates_for)
+    }
 
     // ── RegistryEntry ────────────────────────────────────────────────────────
 
     #[test]
     fn registry_key_has_no_value_name() {
-        let e = RegistryEntry::key(r"HKLM\SOFTWARE\McAfee");
-        assert_eq!(e.key_path, r"HKLM\SOFTWARE\McAfee");
-        assert!(e.value_name.is_none());
+        let entry = RegistryEntry::key(r"HKLM\SOFTWARE\McAfee");
+        assert_eq!(entry.key_path, r"HKLM\SOFTWARE\McAfee");
+        assert!(entry.value_name.is_none());
     }
 
     #[test]
     fn registry_value_stores_name() {
-        let e = RegistryEntry::value(r"HKLM\SOFTWARE\McAfee", "Version");
-        assert_eq!(e.value_name.as_deref(), Some("Version"));
+        let entry = RegistryEntry::value(r"HKLM\SOFTWARE\McAfee", "Version");
+        assert_eq!(entry.value_name.as_deref(), Some("Version"));
     }
 
     // ── FilePath ─────────────────────────────────────────────────────────────
 
     #[test]
     fn file_path_is_not_dir() {
-        let f = FilePath::file(r"C:\Windows\System32\mfehidk.sys");
-        assert!(!f.is_dir);
+        assert!(!FilePath::file(r"C:\Windows\System32\mfehidk.sys").is_dir);
     }
 
     #[test]
     fn dir_path_is_dir() {
-        let d = FilePath::dir(r"C:\Program Files\McAfee");
-        assert!(d.is_dir);
+        assert!(FilePath::dir(r"C:\Program Files\McAfee").is_dir);
+    }
+
+    #[test]
+    fn plain_files_are_never_guarded() {
+        assert_eq!(FilePath::file(r"C:\x\y.txt").blocking_guard(&[]), None);
+        assert_eq!(FilePath::dir(r"C:\x\y").blocking_guard(&[]), None);
+    }
+
+    #[test]
+    fn driver_is_blocked_until_its_service_is_removed() {
+        let driver = FilePath::driver(r"C:\Windows\System32\drivers\aswSP.sys", "aswSP");
+        assert_eq!(driver.blocking_guard(&[]), Some("aswSP"));
+        assert_eq!(driver.blocking_guard(&["AvastSvc"]), Some("aswSP"));
+        assert_eq!(driver.blocking_guard(&["aswSP"]), None);
+    }
+
+    // ── Path safety across the whole knowledge base ──────────────────────────
+
+    #[test]
+    fn every_shipped_path_template_resolves_safely() {
+        for drive in ["C:", "D:"] {
+            let locations = WindowsLocations::conventional(drive);
+            for templates in all_templates() {
+                let paths = templates
+                    .directories
+                    .iter()
+                    .copied()
+                    .chain(templates.drivers.iter().map(|driver| driver.image_template));
+                for template in paths {
+                    assert!(
+                        locations.resolve(template).is_ok(),
+                        "{template} must resolve safely on {drive}: {:?}",
+                        locations.resolve(template)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_guarded_driver_has_a_matching_service_in_the_plan() {
+        for &product in Product::all() {
+            let plan = RemovalPlan::for_product(product);
+            let service_names: Vec<&str> = plan
+                .services
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect();
+
+            for file in &plan.file_paths {
+                let Some(guard) = file.guard_service.as_deref() else {
+                    continue;
+                };
+                assert!(
+                    service_names.contains(&guard),
+                    "{product}: driver {} is guarded by service {guard}, which the plan never removes",
+                    file.path
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_driver_image_is_guarded() {
+        for &product in Product::all() {
+            for file in &RemovalPlan::for_product(product).file_paths {
+                if file.path.to_ascii_lowercase().ends_with(".sys") {
+                    assert!(
+                        file.guard_service.is_some(),
+                        "{product}: driver image {} must be guarded",
+                        file.path
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_plan_path_is_nested_inside_another_plan_path() {
+        for &product in Product::all() {
+            let plan = RemovalPlan::for_product(product);
+            for outer in &plan.file_paths {
+                if !outer.is_dir {
+                    continue;
+                }
+                let prefix = format!("{}\\", outer.path).to_ascii_lowercase();
+                for inner in &plan.file_paths {
+                    assert!(
+                        !inner.path.to_ascii_lowercase().starts_with(&prefix)
+                            || inner.guard_service.is_some(),
+                        "{product}: {} is already swept by {}",
+                        inner.path,
+                        outer.path
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn plans_follow_a_relocated_windows_drive() {
+        let plan =
+            RemovalPlan::for_product_at(Product::Avast, &WindowsLocations::conventional("D:"));
+        assert!(
+            plan.file_paths
+                .iter()
+                .all(|file| file.path.starts_with("D:\\")),
+            "every path should follow the resolver: {:?}",
+            plan.file_paths
+        );
     }
 
     // ── RemovalPlan::action_count ────────────────────────────────────────────
 
     #[test]
-    fn mcafee_plan_is_non_empty() {
-        let plan = RemovalPlan::for_product(Product::McAfee);
-        assert!(plan.is_non_empty());
-    }
-
-    #[test]
-    fn norton_plan_is_non_empty() {
-        let plan = RemovalPlan::for_product(Product::Norton);
-        assert!(plan.is_non_empty());
-    }
-
-    #[test]
-    fn avast_plan_is_non_empty() {
-        let plan = RemovalPlan::for_product(Product::Avast);
-        assert!(plan.is_non_empty());
-    }
-
-    #[test]
-    fn avg_plan_is_non_empty() {
-        let plan = RemovalPlan::for_product(Product::Avg);
-        assert!(plan.is_non_empty());
-    }
-
-    #[test]
-    fn mcafee_plan_has_registry_entries() {
-        let plan = RemovalPlan::for_product(Product::McAfee);
-        assert!(!plan.registry_entries.is_empty());
-    }
-
-    #[test]
-    fn mcafee_plan_has_file_paths() {
-        let plan = RemovalPlan::for_product(Product::McAfee);
-        assert!(!plan.file_paths.is_empty());
-    }
-
-    #[test]
-    fn mcafee_plan_has_services() {
-        let plan = RemovalPlan::for_product(Product::McAfee);
-        assert!(!plan.services.is_empty());
-    }
-
-    #[test]
-    fn norton_plan_has_registry_entries() {
-        let plan = RemovalPlan::for_product(Product::Norton);
-        assert!(!plan.registry_entries.is_empty());
-    }
-
-    #[test]
-    fn norton_plan_has_services() {
-        let plan = RemovalPlan::for_product(Product::Norton);
-        assert!(!plan.services.is_empty());
-    }
-
-    #[test]
-    fn norton_plan_has_scheduled_tasks() {
-        let plan = RemovalPlan::for_product(Product::Norton);
-        assert!(!plan.scheduled_tasks.is_empty());
+    fn every_product_plan_is_non_empty() {
+        for &product in Product::all() {
+            let plan = RemovalPlan::for_product(product);
+            assert!(plan.is_non_empty(), "{product} plan should not be empty");
+            assert!(!plan.registry_entries.is_empty());
+            assert!(!plan.file_paths.is_empty());
+            assert!(!plan.services.is_empty());
+            assert!(!plan.scheduled_tasks.is_empty());
+        }
     }
 
     #[test]
@@ -491,8 +604,7 @@ mod tests {
         assert!(
             plan.file_paths
                 .iter()
-                .any(|entry| entry.path.contains(r"McAfee.com")
-                    || entry.path.contains(r"SiteAdvisor"))
+                .any(|entry| entry.path.contains("McAfee.com"))
         );
     }
 
@@ -504,14 +616,8 @@ mod tests {
                 || entry.key_path.contains("Norton Utilities")
         }));
         assert!(plan.file_paths.iter().any(|entry| {
-            entry.path.contains(r"Norton Secure VPN") || entry.path.contains(r"Norton Utilities")
+            entry.path.contains("Norton Secure VPN") || entry.path.contains("Norton Utilities")
         }));
-    }
-
-    #[test]
-    fn avast_plan_has_scheduled_tasks() {
-        let plan = RemovalPlan::for_product(Product::Avast);
-        assert!(!plan.scheduled_tasks.is_empty());
     }
 
     #[test]
@@ -521,16 +627,11 @@ mod tests {
             entry.key_path.contains("Avast Secure Browser")
                 || entry.key_path.contains("Avast Cleanup")
         }));
-        assert!(plan.file_paths.iter().any(|entry| {
-            entry.path.contains(r"AVAST Software\Browser")
-                || entry.path.contains(r"Common Files\Avast Software")
-        }));
-    }
-
-    #[test]
-    fn avg_plan_has_scheduled_tasks() {
-        let plan = RemovalPlan::for_product(Product::Avg);
-        assert!(!plan.scheduled_tasks.is_empty());
+        assert!(
+            plan.file_paths
+                .iter()
+                .any(|entry| entry.path.contains(r"Common Files\Avast Software"))
+        );
     }
 
     #[test]
@@ -541,9 +642,37 @@ mod tests {
                 || entry.key_path.contains("AVG PC TuneUp")
                 || entry.key_path.contains("AVG TuneUp")
         }));
-        assert!(plan.file_paths.iter().any(|entry| {
-            entry.path.contains(r"C:\Program Files\AVG") || entry.path.contains(r"TuneUp Software")
-        }));
+        assert!(
+            plan.file_paths
+                .iter()
+                .any(|entry| entry.path.contains("TuneUp Software"))
+        );
+    }
+
+    #[test]
+    fn an_empty_plan_is_not_non_empty() {
+        let empty = RemovalPlan {
+            product: Product::McAfee,
+            registry_entries: Vec::new(),
+            file_paths: Vec::new(),
+            services: Vec::new(),
+            scheduled_tasks: Vec::new(),
+        };
+        assert_eq!(empty.action_count(), 0);
+        assert!(!empty.is_non_empty());
+    }
+
+    #[test]
+    fn a_plan_with_a_single_action_is_non_empty() {
+        let single = RemovalPlan {
+            product: Product::McAfee,
+            registry_entries: vec![RegistryEntry::key(r"HKLM\SOFTWARE\McAfee")],
+            file_paths: Vec::new(),
+            services: Vec::new(),
+            scheduled_tasks: Vec::new(),
+        };
+        assert_eq!(single.action_count(), 1);
+        assert!(single.is_non_empty());
     }
 
     #[test]
@@ -558,46 +687,32 @@ mod tests {
 
     #[test]
     fn plan_product_field_matches_requested_product() {
-        assert_eq!(
-            RemovalPlan::for_product(Product::McAfee).product,
-            Product::McAfee
-        );
-        assert_eq!(
-            RemovalPlan::for_product(Product::Norton).product,
-            Product::Norton
-        );
-        assert_eq!(
-            RemovalPlan::for_product(Product::Avast).product,
-            Product::Avast
-        );
-        assert_eq!(RemovalPlan::for_product(Product::Avg).product, Product::Avg);
-    }
-
-    #[test]
-    fn mcafee_registry_entries_all_start_with_hk() {
-        for entry in &RemovalPlan::for_product(Product::McAfee).registry_entries {
-            assert!(
-                entry.key_path.starts_with("HK"),
-                "Registry key should start with HK: {}",
-                entry.key_path
-            );
+        for &product in Product::all() {
+            assert_eq!(RemovalPlan::for_product(product).product, product);
         }
     }
 
     #[test]
-    fn file_paths_start_with_drive_letter_or_backslash() {
-        for plan in [
-            RemovalPlan::for_product(Product::McAfee),
-            RemovalPlan::for_product(Product::Norton),
-            RemovalPlan::for_product(Product::Avast),
-            RemovalPlan::for_product(Product::Avg),
-        ] {
-            for fp in &plan.file_paths {
-                let first = fp.path.chars().next().unwrap_or(' ');
+    fn registry_entries_all_target_a_known_hive() {
+        for &product in Product::all() {
+            for entry in &RemovalPlan::for_product(product).registry_entries {
                 assert!(
-                    first == 'C' || first == '\\',
-                    "Path should be absolute: {}",
-                    fp.path
+                    entry.key_path.starts_with("HKLM\\") || entry.key_path.starts_with("HKCU\\"),
+                    "{product}: unexpected hive in {}",
+                    entry.key_path
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scheduled_tasks_are_absolute_task_paths() {
+        for &product in Product::all() {
+            for task in &RemovalPlan::for_product(product).scheduled_tasks {
+                assert!(
+                    task.task_path.starts_with('\\'),
+                    "{product}: task path should be absolute: {}",
+                    task.task_path
                 );
             }
         }

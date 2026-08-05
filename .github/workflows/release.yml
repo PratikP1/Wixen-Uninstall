@@ -1,43 +1,57 @@
-name: CI
+name: Release
 
+# Publishing is driven by tags: push `v0.1.0` and this builds the installer,
+# checksums it, and attaches it to a GitHub Release.
 "on":
-  pull_request:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish (e.g. v0.1.0)
+        required: true
+        type: string
 
 permissions:
   contents: read
 
-# A newer push to the same branch makes the in-flight run obsolete.
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
 
 jobs:
-  lint:
-    name: Format and lint
+  verify:
+    name: Verify the tagged commit
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          # The Windows-only modules never compile on Linux, so lint them
-          # against the real target as well.
           targets: x86_64-pc-windows-msvc
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@v2
+
+      # A tag that disagrees with Cargo.toml ships an installer whose filename
+      # and Add/Remove Programs entry contradict the release notes.
+      - name: Check the tag matches the package version
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          package_version="$(
+            sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1
+          )"
+          if [ "$tag" != "v$package_version" ]; then
+            echo "Tag $tag does not match Cargo.toml version $package_version" >&2
+            exit 1
+          fi
+          echo "Releasing version $package_version"
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -50,65 +64,21 @@ jobs:
           cargo clippy --locked --all-targets --features test-utils
           --target x86_64-pc-windows-msvc -- -D warnings
 
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@v2
-
       - name: Run test suite
         run: cargo test --locked --features test-utils
 
-  fuzz:
-    name: Build fuzz targets
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Restore Cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: fuzz
-
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
-
-      # A short smoke run: enough to catch a target that no longer compiles or
-      # that panics immediately, without turning CI into a fuzzing farm.
-      - name: Smoke-run each fuzz target
-        run: |
-          targets='fuzz_parse_input fuzz_from_slug fuzz_from_menu_index fuzz_resolve_path'
-          for target in $targets; do
-            cargo fuzz run "$target" -- -max_total_time=20
-          done
-
-  build-installer:
-    name: Build Windows installer
+  publish:
+    name: Build and publish the installer
     runs-on: windows-latest
-    needs: [lint, test]
+    needs: verify
+    permissions:
+      contents: write
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -117,6 +87,9 @@ jobs:
 
       - name: Restore Cargo cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Run test suite
+        run: cargo test --locked --features test-utils
 
       - name: Read package version
         id: package
@@ -138,9 +111,6 @@ jobs:
       - name: Build release binary
         run: cargo build --locked --release --target x86_64-pc-windows-msvc
 
-      # Without an elevation manifest the installed app runs unelevated from the
-      # Start-menu shortcut and every removal action fails with "Access is
-      # denied". Assert it is actually embedded rather than hoping it is.
       - name: Verify the binary requests Administrator
         shell: pwsh
         run: |
@@ -149,9 +119,6 @@ jobs:
           $text = [System.Text.Encoding]::UTF8.GetString($bytes)
           if ($text -notmatch 'requireAdministrator') {
             throw "$exe has no requireAdministrator manifest; it would run unelevated"
-          }
-          if ($text -notmatch 'longPathAware') {
-            throw "$exe is missing the longPathAware manifest setting"
           }
           Write-Host 'Elevation manifest verified.'
 
@@ -172,9 +139,45 @@ jobs:
             throw "ISCC.exe failed with exit code $LASTEXITCODE"
           }
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wixen-installer-${{ steps.package.outputs.version }}
-          path: installer_output/WixenUninstaller-Setup-*.exe
-          if-no-files-found: error
+      # Wixen is unsigned, so a checksum is the only way a downloader can tell
+      # our installer apart from a tampered copy.
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem 'installer_output\WixenUninstaller-Setup-*.exe' |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw 'No installer was produced'
+          }
+
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $installer.FullName).Hash.ToLower()
+          "$hash  $($installer.Name)" |
+            Set-Content -Path "installer_output\$($installer.Name).sha256" -NoNewline
+          Write-Host "SHA256 $hash"
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.package.outputs.version }}'
+          $tag = 'v' + $version
+          $notes = 'docs/release-notes.md'
+          $arguments = @(
+            'release', 'create', $tag,
+            'installer_output\WixenUninstaller-Setup-*.exe',
+            'installer_output\WixenUninstaller-Setup-*.exe.sha256',
+            '--title', "Wixen Uninstaller $version",
+            '--verify-tag'
+          )
+
+          if (Test-Path $notes) {
+            $arguments += @('--notes-file', $notes)
+          } else {
+            $arguments += '--generate-notes'
+          }
+
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "gh release create failed with exit code $LASTEXITCODE"
+          }

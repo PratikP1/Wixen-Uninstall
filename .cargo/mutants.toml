@@ -1,0 +1,28 @@
+# cargo-mutants configuration
+# Author: PratikP1
+#
+# The path matters: cargo-mutants only reads `.cargo/mutants.toml`.
+#
+# Run mutation testing with:
+#   cargo mutants
+#
+# cargo-mutants docs: https://mutants.rs
+
+# Build with the test-utils feature so StubExecutor is available to the
+# integration tests, which is where most mutants are caught.
+features = ["test-utils"]
+
+# Skip the Windows-only modules. They are compiled out on Linux, so no test can
+# execute a mutant inside them and every one would be reported as missed.
+# cargo-mutants names mutants by their innermost module path, so one pattern
+# covers executor::windows, ui::windows, and elevation::windows.
+exclude_re = [
+    "windows::",
+    # `is_elevated` returns a literal `true` off Windows, so its mutant is
+    # equivalent code that no Linux test can distinguish.
+    "is_elevated",
+]
+
+# `main` has no test harness, and the UI dispatch wrappers in `ui.rs` are
+# one-line `#[cfg]` forwards whose logic is covered through `menu.rs`.
+exclude_globs = ["src/main.rs"]

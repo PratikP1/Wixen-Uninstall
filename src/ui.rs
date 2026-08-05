@@ -52,6 +52,20 @@ pub fn confirm_plan(plan: &RemovalPlan) -> io::Result<bool> {
     }
 }
 
+/// Present a blocking error and make no changes.
+pub fn show_error(message: &str) -> io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        windows::show_error(message)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        eprintln!("{message}");
+        Ok(())
+    }
+}
+
 /// Present the final execution report.
 pub fn show_report(report: &ExecutionReport) -> io::Result<()> {
     #[cfg(target_os = "windows")]
@@ -114,25 +128,44 @@ fn confirmation_prompt_text(plan: &RemovalPlan) -> String {
     text
 }
 
+/// Removing kernel drivers and services only takes full effect after a restart.
+const RESTART_ADVICE: &str = "Restart Windows to finish the cleanup.";
+
 fn report_body(report: &ExecutionReport) -> String {
     let mut body = format!(
-        "Product       : {}\nActions tried : {}\nSucceeded     : {}\n",
-        report.product_name, report.actions_attempted, report.actions_succeeded
+        "Product       : {}\nActions tried : {}\nSucceeded     : {}\nSkipped       : {}\n",
+        report.product_name,
+        report.actions_attempted,
+        report.actions_succeeded,
+        report.actions_skipped()
     );
 
     if report.fully_succeeded() {
         body.push_str("Status        : SUCCESS - all artifacts removed.");
     } else {
         body.push_str(&format!(
-            "Status        : PARTIAL - {} error(s):",
-            report.errors.len()
+            "Status        : PARTIAL - {} error(s), {} skipped for safety.",
+            report.errors.len(),
+            report.actions_skipped()
         ));
-        for err in &report.errors {
-            body.push_str(&format!("\n  • {err}"));
-        }
+        append_bullets(&mut body, "Errors", &report.errors);
+        append_bullets(&mut body, "Skipped for safety", &report.warnings);
     }
 
+    body.push_str("\n\n");
+    body.push_str(RESTART_ADVICE);
     body
+}
+
+fn append_bullets(body: &mut String, heading: &str, entries: &[String]) {
+    if entries.is_empty() {
+        return;
+    }
+
+    body.push_str(&format!("\n\n{heading}:"));
+    for entry in entries {
+        body.push_str(&format!("\n  • {entry}"));
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -156,6 +189,7 @@ mod windows {
     const MB_OKCANCEL: u32 = 0x0000_0001;
     const MB_YESNOCANCEL: u32 = 0x0000_0003;
     const MB_HELP: u32 = 0x0000_4000;
+    const MB_ICONERROR: u32 = 0x0000_0010;
     const MB_ICONQUESTION: u32 = 0x0000_0020;
     const MB_ICONWARNING: u32 = 0x0000_0030;
     const MB_ICONINFORMATION: u32 = 0x0000_0040;
@@ -261,6 +295,12 @@ mod windows {
         Ok(selection == IDOK)
     }
 
+    /// A plain message box without the Help button: shown before the help file
+    /// has been proven reachable, so offering F1 would be a dead end.
+    pub fn show_error(message: &str) -> io::Result<()> {
+        show_plain_message(message, APP_TITLE, MB_OK | MB_ICONERROR | MB_SETFOREGROUND).map(|_| ())
+    }
+
     pub fn show_report(report: &ExecutionReport) -> io::Result<()> {
         let title = if report.fully_succeeded() {
             format!("{APP_TITLE} - Removal complete")
@@ -330,28 +370,39 @@ mod windows {
         shell_open(&help_path)
     }
 
+    /// Locate the bundled help file.
+    ///
+    /// Only the directory holding the executable is searched.  Wixen runs
+    /// elevated and hands this path straight to `ShellExecuteW`, so searching
+    /// ancestor directories would let anyone who can write to a parent decide
+    /// what an elevated browser opens — and the root of the system drive is
+    /// writable by authenticated users on a default Windows install.
     fn find_help_path() -> Option<PathBuf> {
-        if let Ok(executable) = std::env::current_exe()
-            && let Some(executable_dir) = executable.parent()
-        {
-            if let Some(path) = help_path_candidates(executable_dir).find(|path| path.is_file()) {
-                return Some(path);
-            }
-        }
+        let beside_executable = std::env::current_exe()
+            .ok()
+            .as_deref()
+            .and_then(Path::parent)
+            .map(|directory| directory.join(HELP_FILE_NAME))
+            .filter(|path| path.is_file());
 
-        if let Ok(current_dir) = std::env::current_dir() {
-            return help_path_candidates(&current_dir).find(|path| path.is_file());
-        }
-
-        None
+        beside_executable.or_else(development_help_path)
     }
 
-    fn help_path_candidates(base_dir: &Path) -> impl Iterator<Item = PathBuf> + '_ {
-        std::iter::once(base_dir.join(HELP_FILE_NAME)).chain(
-            base_dir
-                .ancestors()
-                .map(|ancestor| ancestor.join("docs").join(HELP_FILE_NAME)),
-        )
+    /// In debug builds only, fall back to the checked-out `docs/` folder so
+    /// `cargo run` can open help.  The location is baked in at compile time
+    /// rather than discovered at run time, and release builds omit it entirely.
+    fn development_help_path() -> Option<PathBuf> {
+        #[cfg(debug_assertions)]
+        {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("docs")
+                .join(HELP_FILE_NAME);
+            path.is_file().then_some(path)
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            None
+        }
     }
 
     fn shell_open(path: &Path) -> io::Result<()> {
@@ -401,8 +452,13 @@ mod windows {
         }
     }
 
+    /// Message boxes want CRLF line endings, and our strings use plain LF.
+    /// Collapsing first keeps text that already contains CRLF — such as an
+    /// error message handed back by Windows — from gaining a stray carriage
+    /// return.
     fn to_wide(value: &str) -> Vec<u16> {
-        OsStr::new(&value.replace('\n', "\r\n"))
+        let crlf = value.replace("\r\n", "\n").replace('\n', "\r\n");
+        OsStr::new(&crlf)
             .encode_wide()
             .chain(iter::once(0))
             .collect()
@@ -470,6 +526,7 @@ mod tests {
             product_name: Product::Norton.display_name().to_owned(),
             actions_attempted: 5,
             actions_succeeded: 5,
+            warnings: Vec::new(),
             errors: Vec::new(),
         };
 
@@ -485,6 +542,7 @@ mod tests {
             product_name: Product::McAfee.display_name().to_owned(),
             actions_attempted: 4,
             actions_succeeded: 2,
+            warnings: Vec::new(),
             errors: vec!["registry: access denied".into(), "service: timeout".into()],
         };
 
@@ -492,5 +550,36 @@ mod tests {
         assert!(text.contains("PARTIAL"));
         assert!(text.contains("registry: access denied"));
         assert!(text.contains("service: timeout"));
+    }
+
+    #[test]
+    fn skipped_actions_are_reported_separately_from_errors() {
+        let report = ExecutionReport {
+            product_name: Product::Avast.display_name().to_owned(),
+            actions_attempted: 6,
+            actions_succeeded: 4,
+            warnings: vec![r"C:\Windows\System32\drivers\aswSP.sys: left in place".into()],
+            errors: vec!["aswSP: Access is denied".into()],
+        };
+
+        let text = report_body(&report);
+        assert!(text.contains("Skipped for safety"));
+        assert!(text.contains("aswSP.sys"));
+        assert!(text.contains("Errors"));
+        assert!(text.contains("Access is denied"));
+        assert!(text.contains("Skipped       : 1"));
+    }
+
+    #[test]
+    fn every_report_asks_the_user_to_restart() {
+        let report = ExecutionReport {
+            product_name: Product::Avg.display_name().to_owned(),
+            actions_attempted: 1,
+            actions_succeeded: 1,
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        };
+
+        assert!(report_body(&report).contains(RESTART_ADVICE));
     }
 }

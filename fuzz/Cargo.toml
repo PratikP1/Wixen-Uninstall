@@ -9,7 +9,9 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-wixen_uninstall_lib = { path = ".." }
+# The package is `wixen_uninstall`; its lib target is `wixen_uninstall_lib`,
+# which is the name the fuzz targets import.
+wixen_uninstall = { path = ".." }
 
 [[bin]]
 name = "fuzz_parse_input"
@@ -26,5 +28,11 @@ doc = false
 [[bin]]
 name = "fuzz_from_menu_index"
 path = "fuzz_targets/fuzz_from_menu_index.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_resolve_path"
+path = "fuzz_targets/fuzz_resolve_path.rs"
 test = false
 doc = false
