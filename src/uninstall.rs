@@ -107,6 +107,19 @@ impl UninstallCommand {
         self.args.iter().any(|arg| is_known_silent_switch(arg))
     }
 
+    /// `true` when [`program`](Self::program) is a bare filename carrying no
+    /// directory — the shape MSI normalization produces (`msiexec.exe`).
+    ///
+    /// Such a name must never reach the process launcher unchanged while Wixen
+    /// is elevated: Windows would resolve it through the search path, which
+    /// includes attacker-writable directories, so a planted `msiexec.exe` could
+    /// run with full privilege. The Windows runner resolves a bare name to
+    /// `System32` instead; a path carrying any separator or drive marker is
+    /// already anchored and is left as the vendor wrote it.
+    pub fn program_is_bare_name(&self) -> bool {
+        !self.program.contains(['\\', '/', ':'])
+    }
+
     fn silent_msi_uninstall(product_code: &str) -> Self {
         Self {
             program: MSIEXEC_PROGRAM.to_owned(),
@@ -364,6 +377,49 @@ mod tests {
                 .unwrap()
                 .is_silent()
         );
+    }
+
+    // ── bare-name detection (search-path safety) ─────────────────────────────
+
+    #[test]
+    fn a_normalized_msi_program_is_a_bare_name() {
+        // The one shape the parser itself produces unqualified; it must be
+        // resolved to System32 before an elevated launch.
+        let command =
+            UninstallCommand::parse("MsiExec.exe /X{A7C3D2F1-8E4B-4C9A-B5D6-1F2E3A4B5C6D}")
+                .unwrap();
+        assert_eq!(command.program, "msiexec.exe");
+        assert!(command.program_is_bare_name());
+    }
+
+    #[test]
+    fn any_separator_or_drive_marker_means_not_bare() {
+        // Each marker is checked on its own so dropping one from the set fails a
+        // test: a backslash, a forward slash, and a bare drive-relative colon.
+        for anchored in [
+            r"C:\Program Files\X\uninst.exe",
+            "dir/uninst.exe",
+            r"dir\uninst.exe",
+            "C:uninst.exe",
+        ] {
+            let command = UninstallCommand {
+                program: anchored.to_owned(),
+                args: Vec::new(),
+            };
+            assert!(
+                !command.program_is_bare_name(),
+                "{anchored} is anchored, not a bare name"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_executable_name_is_bare() {
+        let command = UninstallCommand {
+            program: "uninst.exe".to_owned(),
+            args: Vec::new(),
+        };
+        assert!(command.program_is_bare_name());
     }
 
     // ── quoted arguments ─────────────────────────────────────────────────────

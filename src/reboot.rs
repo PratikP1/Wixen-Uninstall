@@ -101,7 +101,7 @@ mod windows {
     fn register_runonce() -> std::io::Result<()> {
         let executable = std::env::current_exe()?;
         let reg = system_tool_path("reg.exe")?;
-        Command::new(reg)
+        let status = Command::new(reg)
             .args([
                 "add",
                 RUNONCE_KEY,
@@ -113,14 +113,27 @@ mod windows {
                 &relaunch_command(&executable),
                 "/f",
             ])
-            .status()
-            .map(|_| ())
+            .status()?;
+        // A non-zero reg.exe means the RunOnce was not written. Surface it so
+        // `arrange_resume` fails and the caller falls back to the report alone
+        // instead of promising an automatic resume it cannot deliver.
+        if status.success() {
+            Ok(())
+        } else {
+            Err(std::io::Error::other(format!(
+                "reg.exe add {RUNONCE_KEY} exited with {status}"
+            )))
+        }
     }
 
     pub fn take_pending_resume() -> Option<ResumeState> {
         let path = state_file_path(&program_data());
         let text = std::fs::read_to_string(&path).ok()?;
-        // Best-effort cleanup: the state is consumed once, whatever it holds.
+        // Best-effort cleanup, and safe to ignore: the state file is deleted
+        // before use so it is consumed exactly once, and a RunOnce that outlives
+        // it merely relaunches `--resume` once more, which finds no state and
+        // exits quietly. `clear_runonce` still reports failures for callers that
+        // do care; here we deliberately do not.
         let _ = std::fs::remove_file(&path);
         let _ = clear_runonce();
         ResumeState::parse(&text)
@@ -128,10 +141,16 @@ mod windows {
 
     fn clear_runonce() -> std::io::Result<()> {
         let reg = system_tool_path("reg.exe")?;
-        Command::new(reg)
+        let status = Command::new(reg)
             .args(["delete", RUNONCE_KEY, "/v", RUNONCE_VALUE_NAME, "/f"])
-            .status()
-            .map(|_| ())
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(std::io::Error::other(format!(
+                "reg.exe delete {RUNONCE_KEY} exited with {status}"
+            )))
+        }
     }
 }
 

@@ -151,6 +151,7 @@ mod windows {
     use crate::executor::ActionOutcome;
     use crate::executor::windows::system_tool_path;
     use crate::uninstall::UninstallCommand;
+    use std::path::PathBuf;
     use std::process::Command;
 
     /// Read the best available uninstall string for `uninstall_key`, preferring
@@ -170,8 +171,28 @@ mod windows {
     }
 
     /// Run a parsed uninstall command and report the outcome.
+    ///
+    /// A bare program name (the `msiexec.exe` an MSI string normalizes to) is
+    /// resolved to `System32` first: launched elevated through the process
+    /// search path, a same-named binary planted earlier in that order could
+    /// hijack it. An anchored path runs as the vendor registered it, and a bare
+    /// name that cannot be resolved is refused rather than run unqualified.
     pub fn run(command: &UninstallCommand) -> ActionOutcome {
-        match Command::new(&command.program).args(&command.args).status() {
+        let program: PathBuf = if command.program_is_bare_name() {
+            match system_tool_path(&command.program) {
+                Ok(path) => path,
+                Err(error) => {
+                    return ActionOutcome::Error(format!(
+                        "refusing to run {} unqualified: {error}",
+                        command.program
+                    ));
+                }
+            }
+        } else {
+            PathBuf::from(&command.program)
+        };
+
+        match Command::new(&program).args(&command.args).status() {
             Ok(status) if status.success() => ActionOutcome::Removed,
             Ok(status) => ActionOutcome::Error(format!(
                 "{} exited with {}",

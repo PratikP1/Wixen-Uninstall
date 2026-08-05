@@ -42,6 +42,15 @@ exclude_re = [
     # it feeds, `parse_reg_query_value`, is tested directly and stays in scope,
     # as do the scripted double's own methods — only the Live reader is excluded.
     "LiveVendorUninstaller>::read_uninstall_string",
+    # The `--resume` entry point's whole-body replacement with
+    # `Ok(Default::default())`. `ExitCode: Default` exists only on newer
+    # toolchains, so this one mutant is *viable and surviving* on some rustc
+    # versions but *unviable* on others (CI's 1.97.1 rejects it). Left to the
+    # baseline it makes the gate's outcome depend on the compiler version;
+    # excluding just this replacement keeps the gate deterministic across the
+    # matrix. The `delete !` elevation-guard mutant on the same function stays in
+    # scope and is caught by `resume_mode_with_nothing_pending_exits_quietly`.
+    "resume_suspended_removal -> io::Result<ExitCode> with Ok\\(Default",
     # The helpers in `ui/task_dialog.rs` that actually call into comctl32.
     # Everything else in that file — the builder, the flag maths, the struct
     # layout, the UTF-16 conversion — is portable and stays in scope.

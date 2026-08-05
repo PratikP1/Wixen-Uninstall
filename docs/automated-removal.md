@@ -51,17 +51,20 @@ these users cannot hear.
 ### Step 0 — Elevate to SYSTEM
 
 Administrator is not always enough. Some services and files are ACL'd against
-Administrators but not against `NT AUTHORITY\SYSTEM`, and the vendor
-uninstaller (step 1) only runs *truly* silently under SYSTEM — otherwise it
-raises its own prompt, which is itself an accessibility trap.
+Administrators but not against `NT AUTHORITY\SYSTEM`, and some vendor
+uninstallers (step 1) run *truly* silently only under SYSTEM — otherwise they
+can raise their own prompt, which is itself an accessibility trap.
 
-Wixen re-launches itself as SYSTEM through a transient scheduled task
-registered to run as `NT AUTHORITY\SYSTEM`, runs it once, and deletes the task.
-This is the standard, documented technique; it needs the Administrator token
-Wixen already requires (see `elevation.rs`).
+**Not yet implemented — design only.** The intended mechanism is for Wixen to
+re-launch itself as SYSTEM through a transient scheduled task registered to run
+as `NT AUTHORITY\SYSTEM`, run it once, and delete the task: the standard
+technique, needing only the Administrator token Wixen already requires. The code
+today carries just the Administrator check (`elevation::is_elevated`); the
+SYSTEM relaunch is described here as the design, not as shipped behavior.
 
-If elevation to SYSTEM fails, the ladder continues under Administrator. SYSTEM
-is an amplifier, never a precondition.
+Because SYSTEM is an amplifier and never a precondition, the ladder already runs
+end to end under Administrator. Adding step 0 would raise the success rate of
+step 1; it would not change the flow.
 
 ### Step 1 — Vendor silent uninstall
 
@@ -71,9 +74,14 @@ the product to remove itself.
 
 Wixen already knows each product's `HKLM\…\Uninstall\<name>` keys — it deletes
 them. Before deleting, it **reads** `QuietUninstallString`, falling back to
-`UninstallString`, and runs it. The command is parsed into a program and
-argument list (see *Parsing uninstall strings*), and silent switches are
-appended when the string does not already carry them.
+`UninstallString`, and parses it into a program and argument list (see *Parsing
+uninstall strings*). It then runs that command **only when it is already
+silent**: a `QuietUninstallString`, an MSI string normalized to a silent
+`msiexec /x … /qn /norestart`, or an `UninstallString` that already carries a
+known silent switch. Wixen never *appends* a guessed silent switch — a wrong
+guess can leave the uninstaller blocking on a dialog a screen-reader user cannot
+dismiss, the very trap this feature removes. A string that is not already silent
+is skipped, and step 2 sweeps whatever it would have removed.
 
 - **Avast / AVG.** `…\Avast\setup\Instup.exe /instop:uninstall /silent`.
   Full silence also wants `SilentUninstallEnabled=1` in the `Common` section of
