@@ -1,0 +1,17 @@
+# cargo-mutants configuration
+# Author: PratikP1
+#
+# Run mutation testing with:
+#   cargo mutants --features test-utils
+#
+# cargo-mutants docs: https://mutants.rs
+
+# Run with the test-utils feature so StubExecutor is available.
+additional_cargo_args = ["--features", "test-utils"]
+
+# Exclude the Windows-only executor helpers from mutation testing because they
+# cannot be executed on Linux CI.
+exclude_re = ["executor::windows::"]
+
+# Require at least one test to execute for each mutant.
+minimum_test_count = 1
