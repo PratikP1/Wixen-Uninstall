@@ -55,16 +55,27 @@ Administrators but not against `NT AUTHORITY\SYSTEM`, and some vendor
 uninstallers (step 1) run *truly* silently only under SYSTEM — otherwise they
 can raise their own prompt, which is itself an accessibility trap.
 
-**Not yet implemented — design only.** The intended mechanism is for Wixen to
-re-launch itself as SYSTEM through a transient scheduled task registered to run
-as `NT AUTHORITY\SYSTEM`, run it once, and delete the task: the standard
-technique, needing only the Administrator token Wixen already requires. The code
-today carries just the Administrator check (`elevation::is_elevated`); the
-SYSTEM relaunch is described here as the design, not as shipped behavior.
+Wixen re-launches itself as SYSTEM through a transient scheduled task registered
+to run as `NT AUTHORITY\SYSTEM` (`schtasks /RU SYSTEM /RL HIGHEST`), runs it
+once, and deletes the task — the standard technique, needing only the
+Administrator token Wixen already requires (see `system_exec.rs`).
 
-Because SYSTEM is an amplifier and never a precondition, the ladder already runs
-end to end under Administrator. Adding step 0 would raise the success rate of
-step 1; it would not change the flow.
+A SYSTEM process runs in **session 0**, which has no desktop: it can show no
+menu, no progress dialog, and reach no screen reader. So the split is strict.
+The interactive Administrator process owns every screen — selection,
+confirmation, a "working" dialog, the report. The SYSTEM process runs
+**headless**: it executes steps 1–4, registers any boot-time resume, and writes
+the report to a file under `%ProgramData%\Wixen\` that the interactive process
+reads back and shows. While it runs, the interactive process shows an
+indeterminate "removing…" dialog, because no per-item progress crosses the
+process boundary.
+
+SYSTEM is an amplifier, never a precondition. If any step of the relaunch fails
+— the scheduled task cannot be created or run, or it produces no readable result
+— the interactive process runs the removal in-process under Administrator, with
+the live progress bar, exactly as it does without SYSTEM. The re-launched
+instance takes an `--execute <product>` branch that only runs the removal and
+never opens the menu, so a SYSTEM run can never spawn another.
 
 ### Step 1 — Vendor silent uninstall
 

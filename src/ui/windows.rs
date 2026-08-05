@@ -20,7 +20,7 @@ use crate::{
         APP_TITLE, HELP_FILE_NAME, HELP_FOOTER, RESTART_SCHEDULED_HEADING, RUNNING_UNINSTALLER,
         confirmation_body, confirmation_heading, plan_details, progress_heading, report_body,
         report_details, report_footer, report_heading, restart_scheduled_body, selection_body,
-        selection_heading,
+        selection_heading, system_wait_body,
     },
     vendor::VendorUninstaller,
 };
@@ -150,6 +150,58 @@ pub fn run_full_removal(
             .join()
             .map_err(|_| io::Error::other("the removal thread panicked"))
     })
+}
+
+/// Run the removal as SYSTEM behind a "working" dialog.
+///
+/// The SYSTEM run is headless — session 0 has no desktop — so no per-item
+/// progress comes back.  The bar creeps one step per poll toward, but never
+/// reaching, a fixed total: that reads as "still working" without ever claiming
+/// to be done, and the body text explains the wait.  Returns `None` when the
+/// relaunch could not be completed, so the caller runs the removal in-process.
+pub fn run_removal_via_system(
+    plan: &RemovalPlan,
+    product: Product,
+) -> io::Result<Option<(ExecutionReport, bool)>> {
+    register_help();
+
+    // At one step per 500ms poll, this saturates after ~5 minutes and then
+    // holds near-full until the run reports back.
+    const CREEP_TOTAL: usize = 600;
+    let state = ProgressState::new();
+    let body = system_wait_body(product);
+    let phase_text = [body.clone()];
+
+    let dialog = Dialog::new(APP_TITLE, &progress_heading(plan), &body)
+        .common_buttons(TDCBF_CANCEL)
+        .allow_cancel(false)
+        .footer(
+            "Wixen is finishing the removal at the highest privilege. Interrupting it \
+             can leave the product half-installed, so this step cannot be cancelled.",
+        );
+
+    let outcome = std::thread::scope(|scope| {
+        let worker = scope.spawn(|| {
+            // Released however the run ends, so a failure or panic still lets the
+            // dialog close instead of stranding it with Cancel disabled.
+            let _release_dialog = FinishOnDrop(&state);
+            let mut ticks = 0usize;
+            crate::system_exec::run_execution_as_system(product, || {
+                ticks = ticks.saturating_add(1);
+                state.advance(0, ticks.min(CREEP_TOTAL - 1));
+            })
+        });
+
+        let _ = show_progress(&dialog, &state, CREEP_TOTAL, &phase_text);
+
+        worker
+            .join()
+            .map_err(|_| io::Error::other("the SYSTEM-wait thread panicked"))
+    })?;
+
+    // Err means the relaunch could not be completed (task refused, timed out, or
+    // wrote no readable result); the caller falls back to an in-process removal.
+    Ok(outcome.ok())
 }
 
 /// Shown when files were queued for boot-time deletion: the removal will finish

@@ -56,6 +56,90 @@ impl ExecutionReport {
         }
         self.actions_succeeded as f64 / self.actions_attempted as f64
     }
+
+    /// Serialize this report — plus whether a boot-time resume was registered —
+    /// to the plain key/value text a headless SYSTEM run hands back to the
+    /// interactive process (see `system_exec`).
+    ///
+    /// Each value is forced onto one line, because a Windows error string can
+    /// carry a newline and the line-oriented [`parse_results`](Self::parse_results)
+    /// would otherwise desynchronize. No serialization dependency, matching
+    /// [`ResumeState`](crate::resume::ResumeState).
+    pub fn to_results_text(&self, resume_registered: bool) -> String {
+        use std::fmt::Write as _;
+        let mut text = String::new();
+        let _ = writeln!(
+            text,
+            "{RESULTS_PRODUCT_KEY}={}",
+            one_line(&self.product_name)
+        );
+        let _ = writeln!(text, "{RESULTS_ATTEMPTED_KEY}={}", self.actions_attempted);
+        let _ = writeln!(text, "{RESULTS_SUCCEEDED_KEY}={}", self.actions_succeeded);
+        let _ = writeln!(text, "{RESULTS_RESUME_KEY}={resume_registered}");
+        for warning in &self.warnings {
+            let _ = writeln!(text, "{RESULTS_WARNING_KEY}={}", one_line(warning));
+        }
+        for error in &self.errors {
+            let _ = writeln!(text, "{RESULTS_ERROR_KEY}={}", one_line(error));
+        }
+        text
+    }
+
+    /// Parse what [`to_results_text`](Self::to_results_text) wrote: the report
+    /// and whether a resume was registered.
+    ///
+    /// Total and panic-free. Returns `None` only when the product line is
+    /// missing, so a truncated file makes the caller run the removal itself
+    /// rather than show an empty report. Unknown keys and blank lines are
+    /// ignored; malformed counts fall back to zero.
+    pub fn parse_results(text: &str) -> Option<(Self, bool)> {
+        let mut product = None;
+        let mut actions_attempted = 0;
+        let mut actions_succeeded = 0;
+        let mut resume_registered = false;
+        let mut warnings = Vec::new();
+        let mut errors = Vec::new();
+
+        for line in text.lines() {
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let value = value.trim();
+            match key.trim() {
+                RESULTS_PRODUCT_KEY => product = Some(value.to_owned()),
+                RESULTS_ATTEMPTED_KEY => actions_attempted = value.parse().unwrap_or(0),
+                RESULTS_SUCCEEDED_KEY => actions_succeeded = value.parse().unwrap_or(0),
+                RESULTS_RESUME_KEY => resume_registered = value == "true",
+                RESULTS_WARNING_KEY if !value.is_empty() => warnings.push(value.to_owned()),
+                RESULTS_ERROR_KEY if !value.is_empty() => errors.push(value.to_owned()),
+                _ => {}
+            }
+        }
+
+        Some((
+            Self {
+                product_name: product?,
+                actions_attempted,
+                actions_succeeded,
+                warnings,
+                errors,
+            },
+            resume_registered,
+        ))
+    }
+}
+
+const RESULTS_PRODUCT_KEY: &str = "product";
+const RESULTS_ATTEMPTED_KEY: &str = "attempted";
+const RESULTS_SUCCEEDED_KEY: &str = "succeeded";
+const RESULTS_RESUME_KEY: &str = "resume";
+const RESULTS_WARNING_KEY: &str = "warning";
+const RESULTS_ERROR_KEY: &str = "error";
+
+/// Flatten to a single line: a value with an embedded newline would otherwise
+/// split into two, and the second half would parse as a stray unkeyed line.
+fn one_line(value: &str) -> String {
+    value.replace(['\r', '\n'], " ")
 }
 
 /// Running totals while a plan executes.
@@ -943,6 +1027,111 @@ mod tests {
         let stub = StubExecutor::all_error("fail");
         let report = execute(&plan, &stub);
         assert_eq!(report.success_rate(), 0.0);
+    }
+
+    // ── results serialization (SYSTEM run → interactive process) ──────────────
+
+    fn detailed_report() -> ExecutionReport {
+        ExecutionReport {
+            product_name: "Avast Antivirus / Avast Premium Security".to_owned(),
+            actions_attempted: 41,
+            actions_succeeded: 39,
+            warnings: vec!["aswSP.sys: left in place".to_owned()],
+            errors: vec!["HKLM\\SOFTWARE\\AVAST: access denied".to_owned()],
+        }
+    }
+
+    #[test]
+    fn a_report_round_trips_through_results_text() {
+        let report = detailed_report();
+        let (parsed, resume) =
+            ExecutionReport::parse_results(&report.to_results_text(true)).expect("valid");
+        assert_eq!(parsed.product_name, report.product_name);
+        assert_eq!(parsed.actions_attempted, report.actions_attempted);
+        assert_eq!(parsed.actions_succeeded, report.actions_succeeded);
+        assert_eq!(parsed.warnings, report.warnings);
+        assert_eq!(parsed.errors, report.errors);
+        assert!(resume, "the resume flag must round-trip as written");
+    }
+
+    #[test]
+    fn the_resume_flag_round_trips_both_ways() {
+        // The flag decides whether the interactive process promises an automatic
+        // restart, so true and false must be distinguishable — not both parsed
+        // as the same value.
+        let report = detailed_report();
+        assert_eq!(
+            ExecutionReport::parse_results(&report.to_results_text(true)).map(|(_, r)| r),
+            Some(true)
+        );
+        assert_eq!(
+            ExecutionReport::parse_results(&report.to_results_text(false)).map(|(_, r)| r),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn attempted_and_succeeded_are_not_confused() {
+        // Distinct values so a mutant that reads one key into the other field
+        // fails rather than passing on coincidentally-equal counts.
+        let report = ExecutionReport {
+            product_name: "X".to_owned(),
+            actions_attempted: 7,
+            actions_succeeded: 3,
+            warnings: Vec::new(),
+            errors: Vec::new(),
+        };
+        let (parsed, _) =
+            ExecutionReport::parse_results(&report.to_results_text(false)).expect("valid");
+        assert_eq!(parsed.actions_attempted, 7);
+        assert_eq!(parsed.actions_succeeded, 3);
+    }
+
+    #[test]
+    fn a_multiline_error_is_flattened_so_it_cannot_desync_parsing() {
+        let report = ExecutionReport {
+            product_name: "X".to_owned(),
+            actions_attempted: 1,
+            actions_succeeded: 0,
+            warnings: Vec::new(),
+            errors: vec!["line one\nline two\r\nline three".to_owned()],
+        };
+        let text = report.to_results_text(false);
+        let (parsed, _) = ExecutionReport::parse_results(&text).expect("valid");
+        assert_eq!(parsed.errors.len(), 1, "the error stays a single entry");
+        assert!(!parsed.errors[0].contains('\n'));
+        assert!(parsed.errors[0].contains("line one"));
+        assert!(parsed.errors[0].contains("line three"));
+    }
+
+    #[test]
+    fn results_without_a_product_line_do_not_parse() {
+        assert!(
+            ExecutionReport::parse_results("attempted=5\nsucceeded=5\nresume=true").is_none(),
+            "without a product there is nothing to show"
+        );
+    }
+
+    #[test]
+    fn empty_warning_and_error_values_are_dropped() {
+        let (parsed, _) =
+            ExecutionReport::parse_results("product=X\nwarning=\nerror=   ").expect("valid");
+        assert!(parsed.warnings.is_empty());
+        assert!(parsed.errors.is_empty());
+    }
+
+    #[test]
+    fn parsing_arbitrary_results_never_panics() {
+        for raw in [
+            "",
+            "\0\0",
+            "product",
+            "==",
+            "attempted=NaN\nproduct=X",
+            &"error=x\n".repeat(500),
+        ] {
+            let _ = ExecutionReport::parse_results(raw);
+        }
     }
 
     // ── execute orchestration ─────────────────────────────────────────────────

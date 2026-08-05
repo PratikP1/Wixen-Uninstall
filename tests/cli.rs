@@ -172,6 +172,34 @@ fn resume_mode_with_nothing_pending_exits_quietly() {
     );
 }
 
+// ─── Headless SYSTEM execution ─────────────────────────────────────────────────
+
+#[test]
+fn execute_mode_with_a_product_exits_quietly() {
+    // This is the headless branch a SYSTEM relaunch takes. Off Windows the Live
+    // executors are no-ops, so it does its (empty) work, writes its report to a
+    // file rather than the console, and exits cleanly. It must never open the
+    // product menu: a SYSTEM relaunch must not start a fresh interactive removal.
+    let output = run_with_args(&["--execute", "avast"], "");
+
+    assert!(
+        output.status.success(),
+        "headless execute must exit cleanly, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("output should be UTF-8");
+    assert!(
+        !stdout.contains("select a product to remove"),
+        "a headless SYSTEM run must never open the menu: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Report"),
+        "the headless run reports to a file, not to the console: {stdout}"
+    );
+}
+
 // ─── Invalid input ───────────────────────────────────────────────────────────
 
 #[test]

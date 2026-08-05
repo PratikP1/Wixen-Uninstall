@@ -112,6 +112,29 @@ pub fn run_full_removal(
     }
 }
 
+/// Run the removal as SYSTEM, showing a "working" dialog while it runs headless.
+///
+/// Returns `Some((report, resume_registered))` when the SYSTEM run completed and
+/// its results were read back, and `None` when the relaunch is unavailable or
+/// failed — in which case the caller runs the removal in-process under
+/// Administrator.  Off Windows there is no SYSTEM to elevate to, so this is
+/// always `None` and the portable in-process path runs.
+pub fn run_removal_via_system(
+    plan: &RemovalPlan,
+    product: Product,
+) -> io::Result<Option<(ExecutionReport, bool)>> {
+    #[cfg(target_os = "windows")]
+    {
+        windows::run_removal_via_system(plan, product)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (plan, product);
+        Ok(None)
+    }
+}
+
 /// Tell the user a restart will finish the removal.
 ///
 /// Shown only after a resume has actually been registered, so the promise that
@@ -363,6 +386,22 @@ pub fn restart_scheduled_body() -> &'static str {
      queued them to be deleted as Windows restarts. It will then run once, on its \
      own, to finish clearing up. Restart Windows when you are ready — you do not \
      need to do anything else."
+}
+
+/// Body of the "working" dialog shown while the removal runs as SYSTEM.
+///
+/// The SYSTEM run is headless, so this screen is all the user has until it
+/// finishes: it names the product, says the wait is expected, and — because a
+/// silent screen reads as a hang — explains that Wixen will show the results by
+/// itself.
+pub fn system_wait_body(product: Product) -> String {
+    format!(
+        "Removing {} with the highest privilege Windows allows, so nothing it \
+         protects can block the removal. This can take a few minutes. Wixen will \
+         show the results on its own when it finishes — you do not need to do \
+         anything.",
+        product.display_name()
+    )
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -665,5 +704,22 @@ mod tests {
     #[test]
     fn the_uninstaller_progress_line_names_the_uninstaller() {
         assert!(RUNNING_UNINSTALLER.contains("uninstaller"));
+    }
+
+    #[test]
+    fn the_system_wait_body_names_the_product_and_reassures() {
+        let body = system_wait_body(Product::Norton);
+        assert!(
+            body.contains("Norton"),
+            "the headless wait must name what is being removed: {body}"
+        );
+        assert!(
+            body.contains("on its own") || body.contains("by itself"),
+            "a silent screen reads as a hang, so it must say Wixen returns itself: {body}"
+        );
+        assert!(
+            !body.contains("Safe Mode"),
+            "the escalation never sends a screen-reader user to Safe Mode: {body}"
+        );
     }
 }

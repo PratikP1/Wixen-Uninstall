@@ -282,13 +282,15 @@ src/
   forceful.rs   - take-ownership / delayed-delete boundary + the per-file loop
   reboot.rs     - persist a suspended run and register the RunOnce resume
   resume.rs     - ResumeState: what a run must finish after a restart (pure)
+  system_exec.rs- re-launch as SYSTEM (schtasks) to run the removal headless,
+                  and read its report back across the process boundary
   elevation.rs  - Administrator privilege detection
   menu.rs       - accessible CLI fallback menu
   ui.rs         - screen wording (pure, unit tested) + platform dispatch
   ui/
     task_dialog.rs - safe wrapper over Win32 TaskDialogIndirect
     windows.rs     - the Windows screens, assembled from ui.rs wording
-  main.rs       - entry point; also the --resume path taken after a restart
+  main.rs       - entry point; the --execute (SYSTEM) and --resume branches
 
 docs/
   automated-removal.md      - design + plan for the escalation and resume flow

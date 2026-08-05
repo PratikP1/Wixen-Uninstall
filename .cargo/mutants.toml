@@ -51,6 +51,25 @@ exclude_re = [
     # matrix. The `delete !` elevation-guard mutant on the same function stays in
     # scope and is caught by `resume_mode_with_nothing_pending_exits_quietly`.
     "resume_suspended_removal -> io::Result<ExitCode> with Ok\\(Default",
+    # `execute_headless`'s whole-body replacement, the same toolchain-fragile
+    # `ExitCode: Default` mutant as the resume entry above: viable-and-surviving
+    # on a newer rustc, unviable on CI's, so excluding it keeps the gate
+    # deterministic. Its `delete !` elevation guard stays in scope and is caught
+    # by `execute_mode_with_a_product_exits_quietly` in cli.rs.
+    "execute_headless -> io::Result<ExitCode> with Ok\\(Default",
+    # `run_execution_as_system` is the SYSTEM-relaunch entry point: the `schtasks`
+    # create/run/await/delete dance, compiled only on Windows and never reachable
+    # on Linux, so its mutants are missed there. The command-line contract
+    # (`parse_execute_request`, `task_run_command`), the results path, and the
+    # report serialization it depends on are all tested; only this Windows I/O
+    # orchestration is excluded, matching `arrange_resume`/`take_pending_resume`.
+    "run_execution_as_system",
+    # `run_removal_via_system`'s non-Windows arm is literally `Ok(None)` — the
+    # in-process fallback — so the whole-body mutant that returns `Ok(None)` is an
+    # identical program on Linux. Its Windows arm delegates to the untestable
+    # `ui::windows` module. `main`'s use of the result (SYSTEM path vs fallback)
+    # is covered by the cli tests, which take the `None` path off Windows.
+    "run_removal_via_system",
     # The helpers in `ui/task_dialog.rs` that actually call into comctl32.
     # Everything else in that file — the builder, the flag maths, the struct
     # layout, the UTF-16 conversion — is portable and stays in scope.
