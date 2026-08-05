@@ -43,6 +43,34 @@ fn norton_full_removal_succeeds_with_stub() {
     assert_eq!(report.actions_attempted, plan.action_count());
 }
 
+#[test]
+fn avast_full_removal_succeeds_with_stub() {
+    let plan = RemovalPlan::for_product(Product::Avast);
+    let stub = StubExecutor::all_removed();
+    let report = execute(&plan, &stub);
+
+    assert!(
+        report.fully_succeeded(),
+        "Expected full success, got errors: {:?}",
+        report.errors
+    );
+    assert_eq!(report.actions_attempted, plan.action_count());
+}
+
+#[test]
+fn avg_full_removal_succeeds_with_stub() {
+    let plan = RemovalPlan::for_product(Product::Avg);
+    let stub = StubExecutor::all_removed();
+    let report = execute(&plan, &stub);
+
+    assert!(
+        report.fully_succeeded(),
+        "Expected full success, got errors: {:?}",
+        report.errors
+    );
+    assert_eq!(report.actions_attempted, plan.action_count());
+}
+
 // ─── Idempotency ─────────────────────────────────────────────────────────────
 
 #[test]
@@ -106,6 +134,36 @@ fn typing_2_in_menu_leads_to_norton_plan() {
     let plan = RemovalPlan::for_product(product);
 
     assert_eq!(plan.product, Product::Norton);
+    assert!(plan.is_non_empty());
+}
+
+#[test]
+fn typing_3_in_menu_leads_to_avast_plan() {
+    let input = b"3\n";
+    let mut reader = io::BufReader::new(input.as_ref());
+    let mut output = Vec::new();
+
+    let product = run_menu(&mut reader, &mut output)
+        .unwrap()
+        .expect("Expected a product");
+    let plan = RemovalPlan::for_product(product);
+
+    assert_eq!(plan.product, Product::Avast);
+    assert!(plan.is_non_empty());
+}
+
+#[test]
+fn typing_4_in_menu_leads_to_avg_plan() {
+    let input = b"4\n";
+    let mut reader = io::BufReader::new(input.as_ref());
+    let mut output = Vec::new();
+
+    let product = run_menu(&mut reader, &mut output)
+        .unwrap()
+        .expect("Expected a product");
+    let plan = RemovalPlan::for_product(product);
+
+    assert_eq!(plan.product, Product::Avg);
     assert!(plan.is_non_empty());
 }
 

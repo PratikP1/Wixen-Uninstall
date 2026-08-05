@@ -168,6 +168,16 @@ mod tests {
     }
 
     #[test]
+    fn parse_3_selects_avast() {
+        assert_eq!(parse_input("3"), MenuChoice::Product(Product::Avast));
+    }
+
+    #[test]
+    fn parse_4_selects_avg() {
+        assert_eq!(parse_input("4"), MenuChoice::Product(Product::Avg));
+    }
+
+    #[test]
     fn parse_q_lowercase_quits() {
         assert_eq!(parse_input("q"), MenuChoice::Quit);
     }
@@ -185,6 +195,16 @@ mod tests {
     #[test]
     fn parse_slug_norton_works() {
         assert_eq!(parse_input("norton"), MenuChoice::Product(Product::Norton));
+    }
+
+    #[test]
+    fn parse_slug_avast_works() {
+        assert_eq!(parse_input("avast"), MenuChoice::Product(Product::Avast));
+    }
+
+    #[test]
+    fn parse_slug_avg_works() {
+        assert_eq!(parse_input("avg"), MenuChoice::Product(Product::Avg));
     }
 
     #[test]
@@ -230,6 +250,24 @@ mod tests {
         let mut output = Vec::new();
         let result = run_menu(&mut reader, &mut output).unwrap();
         assert_eq!(result, Some(Product::Norton));
+    }
+
+    #[test]
+    fn run_menu_returns_avast_for_input_3() {
+        let input = b"3\n";
+        let mut reader = io::BufReader::new(input.as_ref());
+        let mut output = Vec::new();
+        let result = run_menu(&mut reader, &mut output).unwrap();
+        assert_eq!(result, Some(Product::Avast));
+    }
+
+    #[test]
+    fn run_menu_returns_avg_for_input_4() {
+        let input = b"4\n";
+        let mut reader = io::BufReader::new(input.as_ref());
+        let mut output = Vec::new();
+        let result = run_menu(&mut reader, &mut output).unwrap();
+        assert_eq!(result, Some(Product::Avg));
     }
 
     #[test]

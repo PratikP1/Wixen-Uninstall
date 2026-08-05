@@ -1,7 +1,7 @@
 # Wixen-Uninstall
 
-A user-friendly, totally accessible, bullshit-free uninstaller for unwanted
-products like McAfee and Norton crapware.
+A user-friendly, totally accessible, bullshit-free uninstaller for stubborn
+security products like McAfee, Norton, Avast, and AVG.
 
 **Author:** PratikP1
 
@@ -9,14 +9,21 @@ products like McAfee and Norton crapware.
 
 ## Features
 
-- Removes **McAfee Total Protection** and **Norton 360 / Norton Security** completely:
-  files, directories, registry keys, Windows services, and scheduled tasks.
+- Removes **McAfee Total Protection**, **Norton 360 / Norton Security**,
+  **Avast Antivirus / Avast Premium Security**, and
+  **AVG AntiVirus / AVG Internet Security** completely: files, directories,
+  registry keys, Windows services, and scheduled tasks.
 - Fully accessible on Windows — native Win32 dialogs for selection,
   confirmation, and status, with keyboard-only navigation and screen-reader
   friendly system controls.  The CLI remains available as a fallback for
   development and test environments.
+- Deletes self-healing scheduled tasks before services and file paths so
+  stubborn suites like Avast and AVG cannot immediately reinstall themselves
+  during cleanup.
 - Packaged as a standalone Windows installer via **Inno Setup**.
 - Written in pure Rust; no runtime dependencies.
+- Wixen itself is cleanly uninstallable through the standard Windows
+  **Add or Remove Programs** flow.
 - Tested with red/green TDD, mutation testing (`cargo-mutants`), and fuzz
   testing (`cargo-fuzz`).
 
@@ -24,10 +31,12 @@ products like McAfee and Norton crapware.
 
 ## Supported products
 
-| # | Product |
-|---|---------|
-| 1 | McAfee Total Protection |
-| 2 | Norton 360 / Norton Security |
+| # | Product | Notes |
+|---|---------|-------|
+| 1 | McAfee Total Protection | Standard flow |
+| 2 | Norton 360 / Norton Security | Standard flow |
+| 3 | Avast Antivirus / Avast Premium Security | Safe Mode may be needed if self-protection blocks normal-mode cleanup |
+| 4 | AVG AntiVirus / AVG Internet Security | Safe Mode may be needed if self-protection blocks normal-mode cleanup |
 
 Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen-Uninstall/issues)
 
@@ -43,10 +52,16 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
 4. A native Windows dialog will appear and ask which product you want to
    remove.
 5. Confirm the generated removal plan in the follow-up dialog.
-6. Review the completion report shown at the end.
+6. If you are removing Avast or AVG and normal-mode cleanup reports access
+   errors, reboot into **Windows Safe Mode** and run Wixen again.
+7. Review the completion report shown at the end.
 
 > **Note:** The tool must be run with Administrator privileges.  The Inno Setup
 > installer handles this automatically via a UAC prompt.
+>
+> **Wixen uninstall:** To remove Wixen itself, use **Settings ▸ Apps ▸ Installed
+> apps** (or **Add or Remove Programs**) and uninstall **Wixen Uninstaller** like
+> any other Windows application.
 
 ---
 

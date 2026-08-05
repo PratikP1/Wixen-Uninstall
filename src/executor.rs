@@ -71,21 +71,21 @@ pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
         }
     };
 
-    for entry in &plan.registry_entries {
-        let o = executor.remove_registry_entry(entry);
-        handle(o, &entry.key_path);
-    }
-    for fp in &plan.file_paths {
-        let o = executor.remove_file_path(fp);
-        handle(o, &fp.path);
+    for task in &plan.scheduled_tasks {
+        let o = executor.delete_scheduled_task(task);
+        handle(o, &task.task_path);
     }
     for svc in &plan.services {
         let o = executor.stop_and_remove_service(svc);
         handle(o, &svc.name);
     }
-    for task in &plan.scheduled_tasks {
-        let o = executor.delete_scheduled_task(task);
-        handle(o, &task.task_path);
+    for fp in &plan.file_paths {
+        let o = executor.remove_file_path(fp);
+        handle(o, &fp.path);
+    }
+    for entry in &plan.registry_entries {
+        let o = executor.remove_registry_entry(entry);
+        handle(o, &entry.key_path);
     }
 
     ExecutionReport {
@@ -163,13 +163,14 @@ mod windows {
     use std::process::Command;
 
     pub fn delete_registry_entry(entry: &RegistryEntry) -> ActionOutcome {
-        let target = match &entry.value_name {
-            None => entry.key_path.clone(),
-            Some(v) => format!("{} /v {}", entry.key_path, v),
-        };
-        let output = Command::new("reg")
-            .args(["delete", &entry.key_path, "/f"])
-            .output();
+        let mut command = Command::new("reg");
+        command.args(["delete", &entry.key_path]);
+        if let Some(value_name) = &entry.value_name {
+            command.args(["/v", value_name]);
+        }
+        command.arg("/f");
+
+        let output = command.output();
         match output {
             Ok(o) if o.status.success() => ActionOutcome::Removed,
             Ok(o) if o.status.code() == Some(1) => ActionOutcome::NotFound,
@@ -293,6 +294,7 @@ mod tests {
     use super::*;
     use crate::plan::RemovalPlan;
     use crate::product::Product;
+    use std::sync::Mutex;
 
     fn mcafee_plan() -> RemovalPlan {
         RemovalPlan::for_product(Product::McAfee)
@@ -402,5 +404,63 @@ mod tests {
         let stub = StubExecutor::all_removed();
         let report = execute(&plan, &stub);
         assert!((0.0..=1.0).contains(&report.success_rate()));
+    }
+
+    struct RecordingExecutor {
+        calls: Mutex<Vec<&'static str>>,
+    }
+
+    impl RecordingExecutor {
+        fn new() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn sequence(&self) -> Vec<&'static str> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl Executor for RecordingExecutor {
+        fn remove_registry_entry(&self, _: &RegistryEntry) -> ActionOutcome {
+            self.calls.lock().unwrap().push("registry");
+            ActionOutcome::Removed
+        }
+
+        fn remove_file_path(&self, _: &FilePath) -> ActionOutcome {
+            self.calls.lock().unwrap().push("file");
+            ActionOutcome::Removed
+        }
+
+        fn stop_and_remove_service(&self, _: &ServiceEntry) -> ActionOutcome {
+            self.calls.lock().unwrap().push("service");
+            ActionOutcome::Removed
+        }
+
+        fn delete_scheduled_task(&self, _: &ScheduledTask) -> ActionOutcome {
+            self.calls.lock().unwrap().push("task");
+            ActionOutcome::Removed
+        }
+    }
+
+    #[test]
+    fn execute_removes_tasks_before_services_files_and_registry() {
+        let plan = RemovalPlan {
+            product: Product::Avast,
+            registry_entries: vec![RegistryEntry::key(r"HKLM\SOFTWARE\AVAST Software")],
+            file_paths: vec![FilePath::dir(r"C:\ProgramData\AVAST Software")],
+            services: vec![ServiceEntry::new("AvastSvc")],
+            scheduled_tasks: vec![ScheduledTask::new(r"\AVAST Software\Avast\Overseer")],
+        };
+        let executor = RecordingExecutor::new();
+
+        let report = execute(&plan, &executor);
+
+        assert!(report.fully_succeeded());
+        assert_eq!(
+            executor.sequence(),
+            vec!["task", "service", "file", "registry"]
+        );
     }
 }

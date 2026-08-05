@@ -2,9 +2,9 @@
 //!
 //! Author: PratikP1
 //!
-//! The plan is built from static knowledge of where McAfee and Norton store
-//! their files, registry keys, services, and scheduled tasks.  Nothing is
-//! deleted here; the executor module consumes the plan.
+//! The plan is built from static knowledge of where supported security suites
+//! store their files, registry keys, services, and scheduled tasks.  Nothing
+//! is deleted here; the executor module consumes the plan.
 
 use crate::product::Product;
 
@@ -107,6 +107,8 @@ impl RemovalPlan {
         match product {
             Product::McAfee => mcafee_plan(),
             Product::Norton => norton_plan(),
+            Product::Avast => avast_plan(),
+            Product::Avg => avg_plan(),
         }
     }
 
@@ -207,6 +209,100 @@ fn norton_plan() -> RemovalPlan {
     }
 }
 
+// ─── Avast knowledge base ────────────────────────────────────────────────────
+
+fn avast_plan() -> RemovalPlan {
+    RemovalPlan {
+        product: Product::Avast,
+        registry_entries: vec![
+            RegistryEntry::key(r"HKLM\SOFTWARE\AVAST Software"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\AVAST Software"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\AVAST Software\Avast"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\AvastSvc"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\AvastWscReporter"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswMonFlt"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswSnx"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswSP"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswVmm"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\aswRdr2"),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Antivirus",
+            ),
+            RegistryEntry::key(r"HKCU\SOFTWARE\AVAST Software"),
+        ],
+        file_paths: vec![
+            FilePath::dir(r"C:\Program Files\AVAST Software\Avast"),
+            FilePath::dir(r"C:\Program Files (x86)\AVAST Software\Avast"),
+            FilePath::dir(r"C:\ProgramData\AVAST Software"),
+            FilePath::dir(r"C:\ProgramData\AVAST Software\Avast\log"),
+            FilePath::dir(r"C:\ProgramData\AVAST Software\Avast\setup"),
+            FilePath::file(r"C:\Windows\System32\drivers\aswSP.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\aswSnx.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\aswMonFlt.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\aswVmm.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\aswRdr2.sys"),
+        ],
+        services: vec![
+            ServiceEntry::new("AvastSvc"),
+            ServiceEntry::new("AvastWscReporter"),
+            ServiceEntry::new("aswbIDSAgent"),
+            ServiceEntry::new("aswMonFlt"),
+            ServiceEntry::new("aswSnx"),
+            ServiceEntry::new("aswSP"),
+            ServiceEntry::new("aswVmm"),
+            ServiceEntry::new("aswRdr2"),
+        ],
+        scheduled_tasks: vec![
+            ScheduledTask::new(r"\AVAST Software\Avast\Overseer"),
+            ScheduledTask::new(r"\AVAST Software\Avast\AutoRepair"),
+            ScheduledTask::new(r"\AVAST Software\Avast\Periodic Scan"),
+            ScheduledTask::new(r"\AVAST Software\Avast\AvastBrowserUpdate"),
+        ],
+    }
+}
+
+// ─── AVG knowledge base ──────────────────────────────────────────────────────
+
+fn avg_plan() -> RemovalPlan {
+    RemovalPlan {
+        product: Product::Avg,
+        registry_entries: vec![
+            RegistryEntry::key(r"HKLM\SOFTWARE\AVG"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\AVG"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgSvc"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgMonFlt"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgSP"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\avgRdr"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\AVGIDSDriver"),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Antivirus",
+            ),
+            RegistryEntry::key(r"HKCU\SOFTWARE\AVG"),
+        ],
+        file_paths: vec![
+            FilePath::dir(r"C:\Program Files\AVG\Antivirus"),
+            FilePath::dir(r"C:\Program Files (x86)\AVG"),
+            FilePath::dir(r"C:\ProgramData\AVG"),
+            FilePath::dir(r"C:\ProgramData\AVG\Antivirus"),
+            FilePath::file(r"C:\Windows\System32\drivers\avgSP.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\avgMonFlt.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\avgRdr.sys"),
+        ],
+        services: vec![
+            ServiceEntry::new("avgSvc"),
+            ServiceEntry::new("avgMonFlt"),
+            ServiceEntry::new("avgSP"),
+            ServiceEntry::new("avgRdr"),
+            ServiceEntry::new("AVGIDSDriver"),
+        ],
+        scheduled_tasks: vec![
+            ScheduledTask::new(r"\AVG\Antivirus\Overseer"),
+            ScheduledTask::new(r"\AVG\Antivirus\AutoRepair"),
+            ScheduledTask::new(r"\AVG\Antivirus\Periodic Scan"),
+        ],
+    }
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -257,6 +353,18 @@ mod tests {
     }
 
     #[test]
+    fn avast_plan_is_non_empty() {
+        let plan = RemovalPlan::for_product(Product::Avast);
+        assert!(plan.is_non_empty());
+    }
+
+    #[test]
+    fn avg_plan_is_non_empty() {
+        let plan = RemovalPlan::for_product(Product::Avg);
+        assert!(plan.is_non_empty());
+    }
+
+    #[test]
     fn mcafee_plan_has_registry_entries() {
         let plan = RemovalPlan::for_product(Product::McAfee);
         assert!(!plan.registry_entries.is_empty());
@@ -293,6 +401,18 @@ mod tests {
     }
 
     #[test]
+    fn avast_plan_has_scheduled_tasks() {
+        let plan = RemovalPlan::for_product(Product::Avast);
+        assert!(!plan.scheduled_tasks.is_empty());
+    }
+
+    #[test]
+    fn avg_plan_has_scheduled_tasks() {
+        let plan = RemovalPlan::for_product(Product::Avg);
+        assert!(!plan.scheduled_tasks.is_empty());
+    }
+
+    #[test]
     fn action_count_equals_sum_of_parts() {
         let plan = RemovalPlan::for_product(Product::McAfee);
         let expected = plan.registry_entries.len()
@@ -312,6 +432,8 @@ mod tests {
             RemovalPlan::for_product(Product::Norton).product,
             Product::Norton
         );
+        assert_eq!(RemovalPlan::for_product(Product::Avast).product, Product::Avast);
+        assert_eq!(RemovalPlan::for_product(Product::Avg).product, Product::Avg);
     }
 
     #[test]
@@ -330,6 +452,8 @@ mod tests {
         for plan in [
             RemovalPlan::for_product(Product::McAfee),
             RemovalPlan::for_product(Product::Norton),
+            RemovalPlan::for_product(Product::Avast),
+            RemovalPlan::for_product(Product::Avg),
         ] {
             for fp in &plan.file_paths {
                 let first = fp.path.chars().next().unwrap_or(' ');

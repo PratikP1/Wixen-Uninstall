@@ -42,6 +42,9 @@ pub fn confirm_plan(plan: &RemovalPlan) -> io::Result<bool> {
             "Plan contains {} action(s). Starting removal (Administrator privileges required)…\n",
             plan.action_count()
         );
+        if let Some(note) = plan.product.pre_removal_note() {
+            println!("{note}\n");
+        }
         Ok(true)
     }
 }
@@ -62,21 +65,46 @@ pub fn show_report(report: &ExecutionReport) -> io::Result<()> {
 }
 
 #[cfg(any(test, target_os = "windows"))]
-fn selection_prompt_text(first: Product, second: Product) -> String {
-    format!(
-        "Select a product to remove:\n\nYes — {}\nNo — {}\nCancel — Quit",
-        first.display_name(),
-        second.display_name()
-    )
+fn selection_prompt_text(products: &[Product], has_more: bool) -> String {
+    let mut text = String::from("Select a product to remove:\n\n");
+
+    match products {
+        [only] => {
+            text.push_str(&format!("OK — {}\n", only.display_name()));
+        }
+        [first, second] => {
+            text.push_str(&format!(
+                "Yes — {}\nNo — {}\n",
+                first.display_name(),
+                second.display_name()
+            ));
+        }
+        _ => {}
+    }
+
+    if has_more {
+        text.push_str("Cancel — More products");
+    } else {
+        text.push_str("Cancel — Quit");
+    }
+
+    text
 }
 
 #[cfg(any(test, target_os = "windows"))]
 fn confirmation_prompt_text(plan: &RemovalPlan) -> String {
-    format!(
+    let mut text = format!(
         "Ready to remove {}.\n\nThis will attempt {} action(s) and requires Administrator privileges.\n\nSelect OK to start or Cancel to go back.",
         plan.product.display_name(),
         plan.action_count()
-    )
+    );
+
+    if let Some(note) = plan.product.pre_removal_note() {
+        text.push_str("\n\n");
+        text.push_str(note);
+    }
+
+    text
 }
 
 fn report_body(report: &ExecutionReport) -> String {
@@ -132,19 +160,42 @@ mod windows {
     }
 
     pub fn select_product() -> io::Result<Option<Product>> {
-        let (first, second) = dialog_products()?;
-        let selection = show_message(
-            &selection_prompt_text(first, second),
-            APP_TITLE,
-            MB_YESNOCANCEL | MB_ICONQUESTION | MB_SETFOREGROUND,
-        )?;
+        let products = Product::all();
+        if products.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Win32 selection UI requires at least one supported product",
+            ));
+        }
 
-        Ok(match selection {
-            IDYES => Some(first),
-            IDNO => Some(second),
-            IDCANCEL => None,
-            _ => None,
-        })
+        let mut index = 0usize;
+        while index < products.len() {
+            let end = (index + 2).min(products.len());
+            let page = &products[index..end];
+            let has_more = end < products.len();
+            let buttons = if page.len() == 1 {
+                MB_OKCANCEL
+            } else {
+                MB_YESNOCANCEL
+            };
+
+            let selection = show_message(
+                &selection_prompt_text(page, has_more),
+                APP_TITLE,
+                buttons | MB_ICONQUESTION | MB_SETFOREGROUND,
+            )?;
+
+            match (page, selection, has_more) {
+                ([only], IDOK, _) => return Ok(Some(*only)),
+                ([first, _], IDYES, _) => return Ok(Some(*first)),
+                ([_, second], IDNO, _) => return Ok(Some(*second)),
+                (_, IDCANCEL, true) => index = end,
+                (_, IDCANCEL, false) => return Ok(None),
+                _ => return Ok(None),
+            }
+        }
+
+        Ok(None)
     }
 
     pub fn confirm_plan(plan: &RemovalPlan) -> io::Result<bool> {
@@ -174,16 +225,6 @@ mod windows {
             MB_OK | icon | MB_SETFOREGROUND,
         )
         .map(|_| ())
-    }
-
-    fn dialog_products() -> io::Result<(Product, Product)> {
-        match Product::all() {
-            [first, second] => Ok((*first, *second)),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Win32 selection UI expects exactly two supported products",
-            )),
-        }
     }
 
     fn show_message(text: &str, title: &str, kind: u32) -> io::Result<i32> {
@@ -220,10 +261,18 @@ mod tests {
 
     #[test]
     fn selection_prompt_mentions_both_products() {
-        let text = selection_prompt_text(Product::McAfee, Product::Norton);
+        let text = selection_prompt_text(&[Product::McAfee, Product::Norton], true);
         assert!(text.contains(Product::McAfee.display_name()));
         assert!(text.contains(Product::Norton.display_name()));
-        assert!(text.contains("Cancel"));
+        assert!(text.contains("More products"));
+    }
+
+    #[test]
+    fn selection_prompt_uses_quit_on_last_page() {
+        let text = selection_prompt_text(&[Product::Avast, Product::Avg], false);
+        assert!(text.contains(Product::Avast.display_name()));
+        assert!(text.contains(Product::Avg.display_name()));
+        assert!(text.contains("Cancel — Quit"));
     }
 
     #[test]
@@ -233,6 +282,13 @@ mod tests {
         assert!(text.contains(Product::McAfee.display_name()));
         assert!(text.contains(&plan.action_count().to_string()));
         assert!(text.contains("Administrator"));
+    }
+
+    #[test]
+    fn confirmation_prompt_includes_safe_mode_note_when_needed() {
+        let plan = RemovalPlan::for_product(Product::Avast);
+        let text = confirmation_prompt_text(&plan);
+        assert!(text.contains("Safe Mode"));
     }
 
     #[test]

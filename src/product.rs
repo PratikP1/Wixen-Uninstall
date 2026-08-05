@@ -1,4 +1,4 @@
-//! Product catalogue — the two products we know how to remove.
+//! Product catalogue — the products we know how to remove.
 //!
 //! Author: PratikP1
 
@@ -9,6 +9,8 @@ use std::fmt;
 pub enum Product {
     McAfee,
     Norton,
+    Avast,
+    Avg,
 }
 
 impl Product {
@@ -17,12 +19,19 @@ impl Product {
         match self {
             Product::McAfee => "McAfee Total Protection",
             Product::Norton => "Norton 360 / Norton Security",
+            Product::Avast => "Avast Antivirus / Avast Premium Security",
+            Product::Avg => "AVG AntiVirus / AVG Internet Security",
         }
     }
 
     /// All products that Wixen supports, in the order they appear in menus.
     pub fn all() -> &'static [Product] {
-        &[Product::McAfee, Product::Norton]
+        &[
+            Product::McAfee,
+            Product::Norton,
+            Product::Avast,
+            Product::Avg,
+        ]
     }
 
     /// Parse a 1-based menu index entered by the user.
@@ -32,14 +41,26 @@ impl Product {
         Product::all().get(index.wrapping_sub(1)).copied()
     }
 
-    /// Parse from a canonical lowercase slug (`"mcafee"`, `"norton"`).
+    /// Parse from a canonical lowercase slug (for example `"mcafee"` or `"avg"`).
     ///
     /// Case-insensitive.  Returns `None` for unknown slugs.
     pub fn from_slug(slug: &str) -> Option<Product> {
         match slug.trim().to_lowercase().as_str() {
             "mcafee" => Some(Product::McAfee),
             "norton" => Some(Product::Norton),
+            "avast" => Some(Product::Avast),
+            "avg" => Some(Product::Avg),
             _ => None,
+        }
+    }
+
+    /// Extra guidance shown before uninstalling products with self-protection.
+    pub fn pre_removal_note(self) -> Option<&'static str> {
+        match self {
+            Product::Avast | Product::Avg => Some(
+                "This product uses self-protection drivers. For the cleanest removal, rerun Wixen from Windows Safe Mode if normal-mode cleanup reports access denied errors.",
+            ),
+            Product::McAfee | Product::Norton => None,
         }
     }
 }
@@ -68,13 +89,25 @@ mod tests {
         assert!(Product::Norton.display_name().contains("Norton"));
     }
 
+    #[test]
+    fn avast_has_expected_display_name() {
+        assert!(Product::Avast.display_name().contains("Avast"));
+    }
+
+    #[test]
+    fn avg_has_expected_display_name() {
+        assert!(Product::Avg.display_name().contains("AVG"));
+    }
+
     // ── all ──────────────────────────────────────────────────────────────────
 
     #[test]
-    fn all_contains_both_products() {
+    fn all_contains_supported_products() {
         let all = Product::all();
         assert!(all.contains(&Product::McAfee));
         assert!(all.contains(&Product::Norton));
+        assert!(all.contains(&Product::Avast));
+        assert!(all.contains(&Product::Avg));
     }
 
     #[test]
@@ -92,6 +125,16 @@ mod tests {
     #[test]
     fn menu_index_2_is_norton() {
         assert_eq!(Product::from_menu_index(2), Some(Product::Norton));
+    }
+
+    #[test]
+    fn menu_index_3_is_avast() {
+        assert_eq!(Product::from_menu_index(3), Some(Product::Avast));
+    }
+
+    #[test]
+    fn menu_index_4_is_avg() {
+        assert_eq!(Product::from_menu_index(4), Some(Product::Avg));
     }
 
     #[test]
@@ -122,13 +165,23 @@ mod tests {
     }
 
     #[test]
+    fn slug_avast_works() {
+        assert_eq!(Product::from_slug("avast"), Some(Product::Avast));
+    }
+
+    #[test]
+    fn slug_avg_mixed_case_works() {
+        assert_eq!(Product::from_slug("Avg"), Some(Product::Avg));
+    }
+
+    #[test]
     fn slug_with_whitespace_is_trimmed() {
         assert_eq!(Product::from_slug("  norton  "), Some(Product::Norton));
     }
 
     #[test]
     fn unknown_slug_returns_none() {
-        assert_eq!(Product::from_slug("avast"), None);
+        assert_eq!(Product::from_slug("bitdefender"), None);
     }
 
     #[test]
@@ -148,6 +201,18 @@ mod tests {
             format!("{}", Product::Norton),
             Product::Norton.display_name()
         );
+        assert_eq!(format!("{}", Product::Avast), Product::Avast.display_name());
+        assert_eq!(format!("{}", Product::Avg), Product::Avg.display_name());
+    }
+
+    #[test]
+    fn avast_has_safe_mode_note() {
+        assert!(Product::Avast.pre_removal_note().is_some());
+    }
+
+    #[test]
+    fn mcafee_has_no_safe_mode_note() {
+        assert!(Product::McAfee.pre_removal_note().is_none());
     }
 
     // ── round-trip ───────────────────────────────────────────────────────────

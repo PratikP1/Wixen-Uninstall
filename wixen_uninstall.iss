@@ -25,6 +25,7 @@ AppVersion={#AppVersion}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}/issues
 AppUpdatesURL={#AppURL}/releases
+UninstallDisplayIcon={app}\{#AppExeName}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -33,6 +34,7 @@ OutputDir=.\installer_output
 Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=yes
 
 ; Require Administrator — the uninstaller must run elevated.
 PrivilegesRequired=admin
@@ -61,11 +63,11 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Parameters: ""; \
     WorkingDir: "{app}"; \
-    Comment: "Remove McAfee or Norton antivirus completely"
+    Comment: "Remove stubborn antivirus suites completely"
 
 Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Tasks: desktopicon; \
-    Comment: "Remove McAfee or Norton antivirus completely"
+    Comment: "Remove stubborn antivirus suites completely"
 
 [Run]
 ; Offer to launch immediately after install.
@@ -75,6 +77,9 @@ Filename: "{app}\{#AppExeName}"; \
 
 [UninstallRun]
 ; Nothing extra to do — the Windows uninstaller entry is auto-created by Inno.
+
+[UninstallDelete]
+Type: dirifempty; Name: "{app}"
 
 [Code]
 { ---------------------------------------------------------------------------- }
