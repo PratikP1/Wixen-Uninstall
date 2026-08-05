@@ -1,6 +1,6 @@
 name: Release
 
-# Publishing is driven by tags: push `v0.1.0` and this builds the installer,
+# Publishing is driven by tags: push `v0.4.0` and this builds the installer,
 # checksums it, and attaches it to a GitHub Release.
 "on":
   push:
@@ -9,7 +9,7 @@ name: Release
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to build and publish (e.g. v0.1.0)
+        description: Existing tag to build and publish (e.g. v0.4.0)
         required: true
         type: string
 

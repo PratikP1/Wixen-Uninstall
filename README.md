@@ -112,7 +112,7 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
 > file published alongside it, then choose **More info > Run anyway**:
 >
 > ```powershell
-> Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.1.0.exe
+> Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.4.0.exe
 > ```
 >
 > **Help file:** The installer places `WixenUninstallerHelp.html` next to the
@@ -245,8 +245,8 @@ what Wixen is willing to delete recursively.
 # 1. Bump the version in Cargo.toml and add a CHANGELOG entry.
 # 2. Tag it — the workflow refuses to publish if the tag and Cargo.toml
 #    version disagree.
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 The workflow re-runs the full check suite, builds the installer, generates a

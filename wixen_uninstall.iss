@@ -15,7 +15,7 @@
   #define AppName      "Wixen Uninstaller"
 #endif
 #ifndef AppVersion
-  #define AppVersion   "0.1.0"
+  #define AppVersion   "0.4.0"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "PratikP1"

@@ -49,7 +49,7 @@ published alongside it on the
 [Releases](https://github.com/PratikP1/Wixen-Uninstall/releases) page:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.1.0.exe
+Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.4.0.exe
 ```
 
 Only download Wixen from the GitHub Releases page of this repository.
