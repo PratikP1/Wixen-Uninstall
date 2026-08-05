@@ -52,8 +52,9 @@ browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
 - Written in pure Rust; no runtime or build dependencies.
 - Wixen itself is cleanly uninstallable through the standard Windows
   **Add or Remove Programs** flow.
-- Tested with red/green TDD, mutation testing (`cargo-mutants`), and fuzz
-  testing (`cargo-fuzz`).
+- Tested with red/green TDD, and checked with mutation testing
+  (`cargo-mutants`) and fuzzing (`cargo-fuzz`) — both enforced in CI, so a
+  behaviour that no test pins down fails the build.
 
 ---
 
@@ -151,6 +152,14 @@ cargo test --features test-utils
 The `test-utils` feature is required: it exposes `StubExecutor`, and without it
 the integration test target is skipped rather than run.
 
+The suite is in three layers:
+
+| Target | Covers |
+|---|---|
+| unit tests in `src/` | pure logic: plans, path resolution, screen wording, the dialog builder and its Win32 struct layout |
+| `tests/integration.rs` | the executor pipeline end to end against a stub: boot-safety guards, error accumulation, progress ordering |
+| `tests/cli.rs` | the real compiled binary, driven over a pipe — the only way to reach `main` and the stdio dispatch in `ui` |
+
 ### Lint
 
 Clippy must be run against the Windows target too — the Win32 modules are
@@ -166,15 +175,29 @@ cargo clippy --all-targets --features test-utils \
 
 ### Run mutation testing
 
+Every behaviour is expected to be pinned by a test that fails without it, and
+mutation testing is how that is checked rather than assumed. CI runs the same
+script and fails the build if anything new survives.
+
 ```sh
 cargo install cargo-mutants
-cargo mutants
+./scripts/check-mutants.sh
 ```
+
+A **surviving mutant** means the code could be changed that way and the suite
+would still pass — so that behaviour is not really covered. The fix is to write
+the test that fails without it.
+
+`.cargo/mutants-baseline.txt` lists the handful of survivors that are tolerated.
+Every entry must be an *equivalent* mutant, where the mutated program is
+genuinely identical and no test could tell the difference, and each carries a
+comment saying why. Adding to that file is a deliberate, reviewable act; the
+default answer to a survivor is a new test.
 
 Configuration lives in `.cargo/mutants.toml` — that exact path, which is the
 only one cargo-mutants reads. It enables the `test-utils` feature and skips the
-Windows-only modules, which are compiled out on Linux and could never be
-covered there.
+code that calls into the Win32 API, which is compiled out on Linux and could
+never be covered there.
 
 ### Run fuzz targets (requires nightly)
 
@@ -210,6 +233,7 @@ what Wixen is willing to delete recursively.
   `-D warnings`
 - `cargo test --locked --features test-utils` on Linux and Windows
 - A short smoke run of every fuzz target
+- Mutation testing, failing if any behaviour is left unpinned by a test
 - A Windows release build that asserts the elevation manifest is embedded,
   compiles `wixen_uninstall.iss`, and uploads the installer as an artifact
 
@@ -252,8 +276,12 @@ docs/
   WixenUninstallerHelp.html - installed HTML help guide
   release-notes.md          - body of the published GitHub Release
 
+scripts/
+  check-mutants.sh - mutation run + baseline comparison, used by CI
+
 tests/
-  integration.rs - end-to-end pipeline tests
+  integration.rs - executor pipeline tests against a stub
+  cli.rs         - drives the compiled binary over a pipe
 
 fuzz/
   fuzz_targets/

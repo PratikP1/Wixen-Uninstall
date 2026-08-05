@@ -10,9 +10,11 @@
 //!
 //! Only the pieces Wixen actually uses are wrapped.
 
+#[cfg(target_os = "windows")]
+use std::io;
 use std::{
     ffi::c_void,
-    io, iter,
+    iter,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
@@ -65,6 +67,7 @@ struct TaskDialogButton {
 type TaskDialogCallback =
     Option<unsafe extern "system" fn(Hwnd, u32, usize, isize, isize) -> Hresult>;
 
+#[cfg(target_os = "windows")]
 #[link(name = "comctl32")]
 unsafe extern "system" {
     fn TaskDialogIndirect(
@@ -75,6 +78,7 @@ unsafe extern "system" {
     ) -> Hresult;
 }
 
+#[cfg(target_os = "windows")]
 #[link(name = "user32")]
 unsafe extern "system" {
     fn SendMessageW(hwnd: Hwnd, message: u32, wparam: usize, lparam: isize) -> isize;
@@ -295,6 +299,7 @@ impl Dialog {
     }
 
     /// Show the dialog and return the id of the button the user chose.
+    #[cfg(target_os = "windows")]
     pub fn show(&self) -> io::Result<i32> {
         let config = self.config(0, Some(help_callback), 0);
         invoke(&config.config)
@@ -313,6 +318,7 @@ fn optional_ptr(value: Option<&Vec<u16>>) -> *const u16 {
     value.map_or(std::ptr::null(), |text| text.as_ptr())
 }
 
+#[cfg(target_os = "windows")]
 fn invoke(config: &TaskDialogConfig) -> io::Result<i32> {
     let mut pressed = 0i32;
 
@@ -340,14 +346,18 @@ fn invoke(config: &TaskDialogConfig) -> io::Result<i32> {
 // ─── F1 help ─────────────────────────────────────────────────────────────────
 
 /// Set by the owning module so the wrapper stays free of Wixen specifics.
+#[cfg(target_os = "windows")]
 type HelpHandler = fn();
+#[cfg(target_os = "windows")]
 static HELP_HANDLER: std::sync::OnceLock<HelpHandler> = std::sync::OnceLock::new();
 
 /// Register what F1 does.  The first registration wins.
+#[cfg(target_os = "windows")]
 pub fn set_help_handler(handler: HelpHandler) {
     let _ = HELP_HANDLER.set(handler);
 }
 
+#[cfg(target_os = "windows")]
 unsafe extern "system" fn help_callback(
     _hwnd: Hwnd,
     notification: u32,
@@ -402,6 +412,7 @@ impl Default for ProgressState {
 }
 
 /// State the timer callback needs, reachable through `lp_callback_data`.
+#[cfg(target_os = "windows")]
 struct ProgressContext<'a> {
     state: &'a ProgressState,
     total: usize,
@@ -414,6 +425,7 @@ struct ProgressContext<'a> {
 ///
 /// The caller runs the actual work on another thread; this call blocks until
 /// that work reports completion.
+#[cfg(target_os = "windows")]
 pub fn show_progress(
     dialog: &Dialog,
     state: &ProgressState,
@@ -436,6 +448,7 @@ pub fn show_progress(
     invoke(&config.config).map(|_| ())
 }
 
+#[cfg(target_os = "windows")]
 unsafe extern "system" fn progress_callback(
     hwnd: Hwnd,
     notification: u32,
@@ -488,6 +501,7 @@ unsafe extern "system" fn progress_callback(
     }
 }
 
+#[cfg(target_os = "windows")]
 fn update_progress(hwnd: Hwnd, context: &ProgressContext) {
     let completed = context.state.completed.load(Ordering::Relaxed);
     send(hwnd, TDM_SET_PROGRESS_BAR_POS, completed, 0);
@@ -508,6 +522,7 @@ fn update_progress(hwnd: Hwnd, context: &ProgressContext) {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn send(hwnd: Hwnd, message: u32, wparam: usize, lparam: isize) {
     // SAFETY: `hwnd` is the live dialog window the callback was invoked for.
     unsafe { SendMessageW(hwnd, message, wparam, lparam) };
@@ -520,15 +535,18 @@ fn make_range(low: usize, high: usize) -> isize {
     low | (high << 16)
 }
 
+/// UTF-16, NUL-terminated, as every `*W` Win32 entry point expects.
+///
+/// `str::encode_utf16` rather than `OsStrExt::encode_wide`: the input is always
+/// valid UTF-8 so the two agree, and this one compiles everywhere, which keeps
+/// the conversion under test on Linux.
 fn to_wide(value: &str) -> Vec<u16> {
-    use std::os::windows::ffi::OsStrExt;
-
     // Task dialogs render plain LF correctly, but normalising keeps text that
     // arrives with CRLF — such as an error string from Windows — from picking
     // up a stray carriage return.
-    let normalised = value.replace("\r\n", "\n");
-    std::ffi::OsStr::new(&normalised)
-        .encode_wide()
+    value
+        .replace("\r\n", "\n")
+        .encode_utf16()
         .chain(iter::once(0))
         .collect()
 }
@@ -565,6 +583,67 @@ mod tests {
         assert_eq!(Icon::Information.as_resource() as usize, 0xFFFD);
         assert_eq!(Icon::Shield.as_resource() as usize, 0xFFFC);
         assert!(Icon::None.as_resource().is_null());
+    }
+
+    #[test]
+    fn dialog_messages_match_their_documented_numbers() {
+        // Sending the wrong message id fails silently — the dialog simply
+        // ignores it — so the arithmetic is pinned to the absolute values from
+        // commctrl.h rather than trusted.
+        assert_eq!(WM_USER, 0x0400);
+        assert_eq!(TDM_CLICK_BUTTON, 1126);
+        assert_eq!(TDM_SET_PROGRESS_BAR_RANGE, 1129);
+        assert_eq!(TDM_SET_PROGRESS_BAR_POS, 1130);
+        assert_eq!(TDM_ENABLE_BUTTON, 1135);
+        assert_eq!(TDM_UPDATE_ELEMENT_TEXT, 1138);
+    }
+
+    #[test]
+    fn notification_codes_match_their_documented_numbers() {
+        assert_eq!(TDN_BUTTON_CLICKED, 2);
+        assert_eq!(TDN_TIMER, 4);
+        assert_eq!(TDN_DIALOG_CONSTRUCTED, 7);
+        assert_eq!(TDN_HELP, 9);
+        assert_eq!(TDE_CONTENT, 0, "TDE_CONTENT selects the body text");
+        assert_eq!(S_OK, 0);
+        assert_eq!(S_FALSE, 1, "S_FALSE is how a callback vetoes a close");
+    }
+
+    #[test]
+    fn an_extra_flag_that_repeats_a_builder_flag_does_not_cancel_it() {
+        // The merge is an OR, not a toggle: asking again for something the
+        // builder already set must leave it set.
+        let dialog = Dialog::new("t", "m", "c");
+        let built = dialog.config(TDF_SIZE_TO_CONTENT, None, 0);
+
+        let flags = built.config.dw_flags;
+        assert!(
+            flags & TDF_SIZE_TO_CONTENT != 0,
+            "the repeated flag was cancelled instead of merged"
+        );
+    }
+
+    #[test]
+    fn the_always_on_flags_share_no_bits() {
+        // Documents why a mutation of the `|` in `flags()` survives: on
+        // disjoint operands OR and XOR agree, so the mutant is the same
+        // program rather than an untested one. If a future flag overlapped,
+        // this fails and the OR would start to carry real weight.
+        assert_eq!(TDF_SIZE_TO_CONTENT & TDF_POSITION_RELATIVE_TO_WINDOW, 0);
+    }
+
+    #[test]
+    fn make_range_operands_never_overlap() {
+        // Same reasoning for `make_range`: the mask keeps the low word clear
+        // of the high word, so OR and XOR agree. Widening the mask would break
+        // this, and the packing would then need a real test.
+        for (low, high) in [(0, 0), (0, 40), (3, 7), (usize::MAX, usize::MAX)] {
+            let packed = make_range(low, high);
+            let low_bits = packed & 0xFFFF;
+            let high_bits = (packed >> 16) & 0xFFFF;
+            assert_eq!(low_bits, (low & 0xFFFF) as isize);
+            assert_eq!(high_bits, (high & 0xFFFF) as isize);
+        }
     }
 
     #[test]
@@ -628,6 +707,166 @@ mod tests {
             dialog.collapsed_control_text, dialog.expanded_control_text,
             "a button that still says \"Show\" while showing is worse than no label"
         );
+    }
+
+    /// Read back a NUL-terminated UTF-16 buffer the config points at.
+    ///
+    /// # Safety
+    /// `ptr` must be a live, NUL-terminated UTF-16 buffer.
+    unsafe fn read_wide(ptr: *const u16) -> String {
+        assert!(!ptr.is_null(), "expected a string, got null");
+        let mut length = 0;
+        // SAFETY: the caller guarantees a NUL terminator within the allocation.
+        while unsafe { *ptr.add(length) } != 0 {
+            length += 1;
+        }
+        // SAFETY: `length` counted up to, but not including, the terminator.
+        String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(ptr, length) })
+    }
+
+    fn fully_specified_dialog() -> Dialog {
+        Dialog::new("Wixen Uninstaller", "Remove McAfee?", "38 actions.")
+            .icon(Icon::Warning)
+            .button(IDOK, "&Remove it")
+            .common_buttons(TDCBF_CANCEL | TDCBF_CLOSE)
+            .default_button(IDCANCEL)
+            .details("Show details", "Hide details", "everything")
+            .footer("Press F1 for help.")
+    }
+
+    #[test]
+    fn config_reports_its_own_size_so_windows_can_version_check_it() {
+        let dialog = fully_specified_dialog();
+        let built = dialog.config(0, None, 0);
+
+        let declared = built.config.cb_size;
+        assert_eq!(declared as usize, size_of::<TaskDialogConfig>());
+    }
+
+    #[test]
+    fn config_carries_every_field_the_builder_was_given() {
+        let dialog = fully_specified_dialog();
+        let built = dialog.config(TDF_SHOW_PROGRESS_BAR | TDF_CALLBACK_TIMER, None, 99);
+
+        let flags = built.config.dw_flags;
+        assert!(
+            flags & TDF_SHOW_PROGRESS_BAR != 0,
+            "extra flags must merge in"
+        );
+        assert!(flags & TDF_CALLBACK_TIMER != 0);
+        assert!(
+            flags & TDF_SIZE_TO_CONTENT != 0,
+            "builder flags must survive"
+        );
+        assert!(
+            flags & TDF_EXPAND_FOOTER_AREA != 0,
+            "details were requested"
+        );
+
+        let common = built.config.dw_common_buttons;
+        assert_eq!(common, TDCBF_CANCEL | TDCBF_CLOSE);
+
+        let default_button = built.config.n_default_button;
+        assert_eq!(default_button, IDCANCEL);
+
+        let icon = built.config.psz_main_icon;
+        assert_eq!(icon, Icon::Warning.as_resource());
+
+        let callback_data = built.config.lp_callback_data;
+        assert_eq!(callback_data, 99);
+
+        let count = built.config.c_buttons;
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn config_points_at_the_text_the_builder_was_given() {
+        let dialog = fully_specified_dialog();
+        let built = dialog.config(0, None, 0);
+
+        // SAFETY: `built` owns every buffer these pointers refer to and is
+        // still alive.
+        unsafe {
+            assert_eq!(
+                read_wide(built.config.psz_window_title),
+                "Wixen Uninstaller"
+            );
+            assert_eq!(
+                read_wide(built.config.psz_main_instruction),
+                "Remove McAfee?"
+            );
+            assert_eq!(read_wide(built.config.psz_content), "38 actions.");
+            assert_eq!(read_wide(built.config.psz_footer), "Press F1 for help.");
+            assert_eq!(
+                read_wide(built.config.psz_expanded_information),
+                "everything"
+            );
+            assert_eq!(
+                read_wide(built.config.psz_collapsed_control_text),
+                "Show details"
+            );
+            assert_eq!(
+                read_wide(built.config.psz_expanded_control_text),
+                "Hide details"
+            );
+
+            let buttons = built.config.p_buttons;
+            assert!(!buttons.is_null());
+            let first = &*buttons;
+            let id = first.n_button_id;
+            assert_eq!(id, IDOK);
+            assert_eq!(read_wide(first.psz_button_text), "&Remove it");
+        }
+    }
+
+    #[test]
+    fn a_bare_dialog_leaves_every_optional_pointer_null() {
+        let dialog = Dialog::new("t", "m", "c");
+        let built = dialog.config(0, None, 0);
+
+        let footer = built.config.psz_footer;
+        let expanded = built.config.psz_expanded_information;
+        let collapsed_label = built.config.psz_collapsed_control_text;
+        let expanded_label = built.config.psz_expanded_control_text;
+        let verification = built.config.psz_verification_text;
+        let icon = built.config.psz_main_icon;
+        let radio_buttons = built.config.p_radio_buttons;
+        let radio_count = built.config.c_radio_buttons;
+        let width = built.config.cx_width;
+
+        assert!(footer.is_null());
+        assert!(expanded.is_null());
+        assert!(collapsed_label.is_null());
+        assert!(expanded_label.is_null());
+        assert!(verification.is_null(), "Wixen never uses the check box");
+        assert!(icon.is_null(), "Icon::None means no icon");
+        assert!(radio_buttons.is_null(), "Wixen never uses radio buttons");
+        assert_eq!(radio_count, 0);
+        assert_eq!(width, 0, "0 lets Windows pick the width");
+    }
+
+    #[test]
+    fn command_links_reach_the_config_in_order() {
+        let dialog = Dialog::new("t", "m", "c")
+            .command_link(100, "McAfee", "and WebAdvisor")
+            .command_link(101, "Norton", "and Secure VPN");
+        let built = dialog.config(0, None, 0);
+
+        let count = built.config.c_buttons;
+        assert_eq!(count, 2);
+
+        let buttons = built.config.p_buttons;
+        // SAFETY: `built` owns the array and the strings it points at.
+        unsafe {
+            let first = &*buttons;
+            let second = &*buttons.add(1);
+            let first_id = first.n_button_id;
+            let second_id = second.n_button_id;
+            assert_eq!(first_id, 100);
+            assert_eq!(second_id, 101);
+            assert_eq!(read_wide(first.psz_button_text), "McAfee\nand WebAdvisor");
+            assert_eq!(read_wide(second.psz_button_text), "Norton\nand Secure VPN");
+        }
     }
 
     #[test]

@@ -47,6 +47,10 @@ First public release.
 - Removal report distinguishing errors from actions skipped for safety, and
   advising a restart.
 - Fuzz targets for the menu parser, product lookup, and path resolver.
+- End-to-end tests that drive the compiled binary over a pipe, covering `main`
+  and the stdio dispatch that in-process tests cannot reach.
+- Mutation testing enforced in CI against a reviewed baseline, so a behaviour
+  that no test pins down fails the build rather than passing quietly.
 - CI: formatting, Clippy on both the host and Windows targets, tests on Linux
   and Windows, fuzz smoke runs, and installer packaging. The Windows job
   asserts the manifest is embedded and then launches the built binary to prove

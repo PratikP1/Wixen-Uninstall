@@ -50,3 +50,9 @@ strip = "symbols"
 name = "integration"
 path = "tests/integration.rs"
 required-features = ["test-utils"]
+
+# Drives the compiled binary over a pipe, which is the only way to cover `main`
+# and the stdio dispatch in `ui`. Needs no features of its own.
+[[test]]
+name = "cli"
+path = "tests/cli.rs"

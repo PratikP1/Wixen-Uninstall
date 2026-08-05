@@ -101,10 +101,33 @@ jobs:
             cargo fuzz run "$target" -- -max_total_time=20
           done
 
+  mutants:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --locked
+
+      # A surviving mutant is behaviour no test pins down: the code could be
+      # changed that way and the suite would still pass. Only the provably
+      # equivalent ones in .cargo/mutants-baseline.txt are tolerated.
+      - name: Check every behaviour is pinned by a test
+        run: ./scripts/check-mutants.sh --jobs 2
+
   build-installer:
     name: Build Windows installer
     runs-on: windows-latest
-    needs: [lint, test]
+    needs: [lint, test, mutants]
 
     steps:
       - name: Check out repository

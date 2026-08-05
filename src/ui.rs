@@ -14,7 +14,12 @@
 //! data, so it can be unit tested on any platform.  Only the drawing lives
 //! behind `#[cfg(target_os = "windows")]`.
 
-#[cfg(target_os = "windows")]
+// Only the calls into `TaskDialogIndirect` are Windows-only. The builder, the
+// flag computation, the UTF-16 conversion, and the struct layout are plain data
+// manipulation, so the module is compiled under `cfg(test)` everywhere too —
+// that is what puts them in front of the test suite and cargo-mutants, both of
+// which run on Linux.
+#[cfg(any(target_os = "windows", test))]
 mod task_dialog;
 #[cfg(target_os = "windows")]
 mod windows;
