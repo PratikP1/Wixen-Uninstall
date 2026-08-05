@@ -432,7 +432,10 @@ mod tests {
             RemovalPlan::for_product(Product::Norton).product,
             Product::Norton
         );
-        assert_eq!(RemovalPlan::for_product(Product::Avast).product, Product::Avast);
+        assert_eq!(
+            RemovalPlan::for_product(Product::Avast).product,
+            Product::Avast
+        );
         assert_eq!(RemovalPlan::for_product(Product::Avg).product, Product::Avg);
     }
 
