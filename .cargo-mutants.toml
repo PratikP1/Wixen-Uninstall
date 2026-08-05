@@ -13,5 +13,5 @@ additional_cargo_args = ["--features", "test-utils"]
 # cannot be executed on Linux CI.
 exclude_re = ["executor::windows::"]
 
-# Fail the build if more than 5 % of mutants survive.
+# Require at least one test to execute for each mutant.
 minimum_test_count = 1
