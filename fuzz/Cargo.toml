@@ -36,3 +36,9 @@ name = "fuzz_resolve_path"
 path = "fuzz_targets/fuzz_resolve_path.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_parse_uninstall"
+path = "fuzz_targets/fuzz_parse_uninstall.rs"
+test = false
+doc = false
