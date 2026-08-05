@@ -101,7 +101,7 @@ Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
 ; Offer to launch immediately after install.
 Filename: "{app}\{#AppExeName}"; \
     Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; \
-    Flags: nowait postinstall skipifsilent runascurrentuser
+    Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; Nothing extra to do - the Windows uninstaller entry is auto-created by Inno.
