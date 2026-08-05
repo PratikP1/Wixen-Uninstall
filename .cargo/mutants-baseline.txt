@@ -23,3 +23,13 @@ src/ui/task_dialog.rs: replace | with ^ in make_range
 src/stats_ini.rs: replace > with >= in rewrite_within_common
 src/stats_ini.rs: replace < with <= in rewrite_within_common
 src/stats_ini.rs: replace + with * in section_contains_key
+
+# The `--resume` entry point, replaced wholesale by an early success. Mutation
+# runs on Linux, where `take_pending_resume` is a no-op returning `None`, so the
+# real function also does nothing but return success with no output — the mutant
+# is indistinguishable here. Its only divergence is on Windows, where it would
+# skip a real resume; that is the unverifiable Windows I/O layer this crate
+# documents it cannot exercise in CI. The `delete !` mutant on the same function
+# *is* caught, by `resume_mode_with_nothing_pending_exits_quietly` in cli.rs, so
+# the elevation guard stays pinned; only this equivalent-on-Linux return is excused.
+src/main.rs: replace resume_suspended_removal -> io::Result<ExitCode> with Ok(Default::default())

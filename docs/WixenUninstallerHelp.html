@@ -154,17 +154,35 @@
         <strong>Skipped for safety</strong> means Wixen deliberately left
         something alone. This happens when a driver file could not be removed
         safely: its service was still registered, and deleting the file anyway
-        could stop Windows from starting. Rerunning from Safe Mode normally
-        clears both.
+        could stop Windows from starting. Restart Windows and run Wixen again to
+        finish clearing it — a normal restart usually releases the service's
+        hold.
       </li>
     </ul>
 
-    <h2>Safe Mode note</h2>
+    <h2>Self-protecting products (Avast and AVG)</h2>
     <p>
-      If Avast or AVG reports access denied errors during normal cleanup, reboot
-      into Windows Safe Mode and run Wixen Uninstaller again. Their
-      self-protection drivers block removal while Windows is running normally.
+      Avast and AVG load a kernel driver that blocks removal while Windows is
+      running normally. You do <strong>not</strong> need Safe Mode — which is
+      important, because Windows 10 often loads no audio driver in Safe Mode, so
+      a screen reader cannot start there. Wixen handles this automatically:
     </p>
+    <ul>
+      <li>
+        It runs the product's own silent uninstaller first, which can switch off
+        self-protection from the inside.
+      </li>
+      <li>
+        For anything the product locks, Wixen takes ownership where it can, and
+        queues whatever is still locked for deletion during your next restart.
+      </li>
+      <li>
+        If files were queued, Wixen registers itself to run once more
+        automatically after you restart, to finish the cleanup. Just restart
+        Windows normally when it is convenient — your screen reader and audio
+        work as usual, and you do not need to do anything else.
+      </li>
+    </ul>
 
     <h2>Removing Wixen Uninstaller</h2>
     <p>

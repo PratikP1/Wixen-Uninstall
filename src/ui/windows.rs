@@ -11,14 +11,18 @@ use super::task_dialog::{
     show_progress,
 };
 use crate::{
-    executor::{ExecutionReport, Executor, RemovalPhase, execute_with_progress},
+    executor::{ExecutionReport, Executor, RemovalPhase, execute_full_with_progress},
+    forceful::ForcefulExecutor,
     plan::RemovalPlan,
     product::Product,
+    resume::ResumeState,
     ui::{
-        APP_TITLE, HELP_FILE_NAME, HELP_FOOTER, confirmation_body, confirmation_heading,
-        plan_details, progress_heading, report_body, report_details, report_footer, report_heading,
-        selection_body, selection_heading,
+        APP_TITLE, HELP_FILE_NAME, HELP_FOOTER, RESTART_SCHEDULED_HEADING, RUNNING_UNINSTALLER,
+        confirmation_body, confirmation_heading, plan_details, progress_heading, report_body,
+        report_details, report_footer, report_heading, restart_scheduled_body, selection_body,
+        selection_heading,
     },
+    vendor::VendorUninstaller,
 };
 use std::{
     ffi::{OsStr, c_void},
@@ -98,14 +102,19 @@ impl Drop for FinishOnDrop<'_> {
     }
 }
 
-/// Run the plan on a worker thread while a progress dialog reports on it.
+/// Run the full escalating removal on a worker thread while a progress dialog
+/// reports on it.
 ///
 /// Without this the window simply stops responding for the length of the
 /// removal, which for a screen-reader user is indistinguishable from a crash.
-pub fn run_removal(
+/// The dialog opens on the uninstaller step — the one opaque phase — and the
+/// bar begins to move once the guarded sweep starts.
+pub fn run_full_removal(
     plan: &RemovalPlan,
+    vendor: &(dyn VendorUninstaller + Sync),
     executor: &(dyn Executor + Sync),
-) -> io::Result<ExecutionReport> {
+    forceful: &(dyn ForcefulExecutor + Sync),
+) -> io::Result<(ExecutionReport, Option<ResumeState>)> {
     register_help();
 
     let total = plan.action_count();
@@ -115,14 +124,10 @@ pub fn run_removal(
         .map(|phase| phase.description().to_owned())
         .collect();
 
-    let dialog = Dialog::new(
-        APP_TITLE,
-        &progress_heading(plan),
-        RemovalPhase::ScheduledTasks.description(),
-    )
-    .common_buttons(TDCBF_CANCEL)
-    .allow_cancel(false)
-    .footer("Interrupting a removal can leave the product half-installed, so this step cannot be cancelled.");
+    let dialog = Dialog::new(APP_TITLE, &progress_heading(plan), RUNNING_UNINSTALLER)
+        .common_buttons(TDCBF_CANCEL)
+        .allow_cancel(false)
+        .footer("Interrupting a removal can leave the product half-installed, so this step cannot be cancelled.");
 
     std::thread::scope(|scope| {
         let worker = scope.spawn(|| {
@@ -130,7 +135,7 @@ pub fn run_removal(
             // panic would leave the dialog waiting on a worker that will never
             // report, with its Cancel button disabled and no way out.
             let _release_dialog = FinishOnDrop(&state);
-            execute_with_progress(plan, executor, &mut |phase, completed| {
+            execute_full_with_progress(plan, vendor, executor, forceful, &mut |phase, completed| {
                 state.advance(phase.index(), completed);
             })
         });
@@ -145,6 +150,23 @@ pub fn run_removal(
             .join()
             .map_err(|_| io::Error::other("the removal thread panicked"))
     })
+}
+
+/// Shown when files were queued for boot-time deletion: the removal will finish
+/// on its own after a normal restart, so the user is never left wondering.
+pub fn show_restart_scheduled() -> io::Result<()> {
+    register_help();
+
+    Dialog::new(
+        APP_TITLE,
+        RESTART_SCHEDULED_HEADING,
+        restart_scheduled_body(),
+    )
+    .icon(Icon::Information)
+    .common_buttons(TDCBF_CLOSE)
+    .footer(HELP_FOOTER)
+    .show()
+    .map(|_| ())
 }
 
 /// The final report, with failures and safety skips behind "Show details".

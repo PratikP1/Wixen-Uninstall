@@ -24,6 +24,24 @@ exclude_re = [
     # `show_error` only runs when `is_elevated` says no, which off Windows it
     # never does, so no Linux test can reach it.
     "show_error",
+    # `show_restart_scheduled` only runs after a removal has deferred files to a
+    # reboot, which off Windows the no-op `LiveExecutor` never does, so no Linux
+    # test can reach it. Its wording is pinned by the `restart_notice` tests.
+    "show_restart_scheduled",
+    # `arrange_resume` and `take_pending_resume` are the reboot-persistence
+    # dispatch. Off Windows both are no-op stubs — write nothing, read nothing —
+    # so a Linux mutant either duplicates the stub (equivalent) or changes an
+    # effect no test can observe. The RunOnce and state-file I/O they wrap is
+    # Windows-only; the pure parts (`state_file_path`, `relaunch_command`,
+    # `is_resume_request`, `ResumeState::parse`) are tested and stay in scope.
+    "arrange_resume",
+    "take_pending_resume",
+    # `LiveVendorUninstaller::read_uninstall_string` shells out to reg.exe on
+    # Windows and returns `None` off it; a Linux mutant's value is swallowed by
+    # the equally-stubbed `run`, so no test can distinguish it. The pure parser
+    # it feeds, `parse_reg_query_value`, is tested directly and stays in scope,
+    # as do the scripted double's own methods — only the Live reader is excluded.
+    "LiveVendorUninstaller>::read_uninstall_string",
     # The helpers in `ui/task_dialog.rs` that actually call into comctl32.
     # Everything else in that file — the builder, the flag maths, the struct
     # layout, the UTF-16 conversion — is portable and stays in scope.

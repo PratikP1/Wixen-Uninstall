@@ -1,7 +1,8 @@
 # Automated removal — design and implementation plan
 
 **Author:** PratikP1
-**Status:** in progress
+**Status:** implemented in the pure core and the Windows I/O shims; unverified on
+real hardware (see *What is testable, and what is not*)
 **Audience:** contributors
 
 ## The problem this solves
@@ -43,8 +44,9 @@ needed.
 ```
 
 A run succeeds without ever leaving normal mode when steps 1–4 between them
-clear everything. Safe Mode appears in the report only as a last resort, and
-only with an explicit warning that audio may be unavailable there.
+clear everything. When something survives, the report says so plainly and points
+to a normal restart and a re-run — it never sends the user to Safe Mode, which
+these users cannot hear.
 
 ### Step 0 — Elevate to SYSTEM
 
@@ -253,4 +255,18 @@ the work can stop at any boundary and still improve on Safe Mode.
 | Corrupt resume state after reboot | parse to "nothing pending"; report and clear, never panic |
 | RunOnce fires but the state file is gone | no-op resume; nothing is deleted blind |
 | User never restarts | pending deletions simply do not happen; the report already told them a restart is required |
-```
+| Self-protection intact **and** no usable vendor uninstaller | the protected artifacts may survive every automated step; the report lists exactly what remains and points to a restart-and-retry, never to Safe Mode. This is the accepted floor: an inaccessible instruction is worse than an honest, incomplete removal |
+
+## Where this can still fall short
+
+The ladder retires Safe Mode for the common cases — a working vendor
+uninstaller (step 1) disarms self-protection from the inside, and most stubborn
+leftovers are permission-denied rather than driver-protected (step 3) or merely
+locked (step 4). The residual hard case is a product whose self-protection is
+fully intact *and* whose own uninstaller cannot be found or run. There, a normal
+restart may not release the guarded driver, and Wixen deliberately stops rather
+than delete a registered driver's image (which would break boot) or send the
+user somewhere they cannot hear. The removal is reported as incomplete, with the
+survivors named. Closing this last gap is what step 0 (running as SYSTEM, so the
+vendor uninstaller runs truly silently) is for; until that is verified on real
+hardware it is documented as an amplifier, not a guarantee.

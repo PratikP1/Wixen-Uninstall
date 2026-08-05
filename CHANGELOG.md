@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Automated removal of self-protecting products, without Safe Mode.** Avast
+  and AVG load a kernel driver that blocks removal while Windows runs normally.
+  The previous advice was to reboot into Safe Mode — but Windows 10 often loads
+  no audio driver there, so a screen-reader user cannot start speech and is
+  stranded. Removal now escalates automatically in normal mode instead:
+  - runs the product's own silent uninstaller, read from the registry and never
+    guessed, which can disarm self-protection from the inside;
+  - takes ownership and resets the ACL of permission-denied leftovers, then
+    retries the deletion;
+  - queues anything still locked for deletion during the next boot (`MoveFileEx`
+    with `MOVEFILE_DELAY_UNTIL_REBOOT`);
+  - when files are deferred, registers a `RunOnce` resume so Wixen finishes the
+    job automatically after a **normal** restart, then clears its own state.
+- The driver-image guard now protects the delayed-deletion path as well: a
+  driver whose service is still registered is never queued for boot-time
+  removal, so the boot-safety invariant holds on every rung of the ladder.
+- `fuzz_parse_uninstall` target for the new uninstall-string parser.
+
+### Changed
+
+- Report, help, and product-note wording no longer mention Safe Mode; they point
+  to a normal restart and, when files were deferred, an automatic resume.
+
+### Notes
+
+- The escalation's Windows-only I/O (invoking the vendor uninstaller,
+  take-ownership/`icacls`, `MoveFileEx`, and the `RunOnce` write) compiles and is
+  linted on `x86_64-pc-windows-msvc`, but **CI cannot prove it works** against a
+  real antivirus. Every decision it drives is unit- and mutation-tested on Linux
+  against stubs; the effects are unverified until run on a Windows machine with
+  the product installed. This must not be described as verified, or ship in a
+  tagged release, before that hardware test.
+
 ## [0.4.0] - 2026-08-05
 
 First public release.

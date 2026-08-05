@@ -191,11 +191,16 @@ impl RemovalPhase {
 pub type ProgressCallback<'a> = &'a mut dyn FnMut(RemovalPhase, usize);
 
 /// Explains why a driver image was left on disk.
+///
+/// No Safe Mode: that route is closed to the screen-reader users this tool is
+/// for, because Windows 10 Safe Mode does not reliably load the audio driver
+/// Narrator needs.  A normal restart often releases the service's hold, so the
+/// honest next step is to restart and run Wixen once more.
 fn driver_guard_reason(service: &str) -> String {
     format!(
-        "left in place because the {service} service could not be removed - \
+        "left in place because the {service} service is still registered - \
          deleting a registered driver's file can stop Windows from starting. \
-         Reboot into Safe Mode and run Wixen again."
+         Restart Windows and run Wixen again to finish removing it."
     )
 }
 
@@ -291,13 +296,34 @@ pub fn execute_full(
     executor: &dyn Executor,
     forceful: &dyn ForcefulExecutor,
 ) -> (ExecutionReport, Option<ResumeState>) {
+    execute_full_with_progress(plan, vendor, executor, forceful, &mut |_, _| {})
+}
+
+/// As [`execute_full`], reporting progress after every swept action.
+///
+/// The vendor uninstaller runs first and reports nothing — it is one opaque,
+/// possibly slow step with no per-item progress to give — so the count starts
+/// advancing only once the guarded sweep begins.  From there `on_progress`
+/// fires after each task, service, file, and registry key, exactly matching
+/// [`RemovalPlan::action_count`], so the progress bar the simple
+/// [`execute_with_progress`] drives works here unchanged.
+pub fn execute_full_with_progress(
+    plan: &RemovalPlan,
+    vendor: &dyn VendorUninstaller,
+    executor: &dyn Executor,
+    forceful: &dyn ForcefulExecutor,
+    on_progress: ProgressCallback<'_>,
+) -> (ExecutionReport, Option<ResumeState>) {
     let mut tally = Tally::default();
     let mut resume = ResumeState::new(plan.product);
+    let mut completed = 0usize;
 
     record_vendor_uninstalls(plan, vendor, &mut tally);
 
     for task in &plan.scheduled_tasks {
         tally.record(executor.delete_scheduled_task(task), &task.task_path);
+        completed += 1;
+        on_progress(RemovalPhase::ScheduledTasks, completed);
     }
 
     let mut removed_services: Vec<&str> = Vec::new();
@@ -307,6 +333,8 @@ pub fn execute_full(
             removed_services.push(&service.name);
         }
         tally.record(outcome, &service.name);
+        completed += 1;
+        on_progress(RemovalPhase::Services, completed);
     }
 
     for file in &plan.file_paths {
@@ -318,6 +346,8 @@ pub fn execute_full(
             &mut tally,
             &mut resume,
         );
+        completed += 1;
+        on_progress(RemovalPhase::Files, completed);
     }
 
     // Registry keys are attempted now.  When a restart is already pending, a key
@@ -326,6 +356,8 @@ pub fn execute_full(
     let restart_pending = !resume.pending_files.is_empty();
     for entry in &plan.registry_entries {
         record_registry(entry, executor, restart_pending, &mut tally, &mut resume);
+        completed += 1;
+        on_progress(RemovalPhase::Registry, completed);
     }
 
     let report = ExecutionReport {
@@ -336,6 +368,36 @@ pub fn execute_full(
         errors: tally.errors,
     };
     (report, (!resume.is_empty()).then_some(resume))
+}
+
+/// Finish a removal suspended before a restart.
+///
+/// The files queued for boot-time deletion are already gone (Windows removed
+/// them during early boot), so this deletes the registry keys that were waiting
+/// on them and confirms the files are absent.  Idempotent: a `NotFound` counts
+/// as done, so re-running changes nothing.
+pub fn finish_resume(state: &ResumeState, executor: &dyn Executor) -> ExecutionReport {
+    let mut tally = Tally::default();
+
+    for path in &state.pending_files {
+        // Removed at boot → NotFound now, which is success.  Anything else means
+        // the boot-time deletion did not take.
+        let file = FilePath::file(path);
+        tally.record(executor.remove_file_path(&file), path);
+    }
+
+    for key in &state.pending_registry {
+        let entry = RegistryEntry::key(key.clone());
+        tally.record(executor.remove_registry_entry(&entry), key);
+    }
+
+    ExecutionReport {
+        product_name: state.product.display_name().to_owned(),
+        actions_attempted: state.pending_files.len() + state.pending_registry.len(),
+        actions_succeeded: tally.succeeded,
+        warnings: tally.warnings,
+        errors: tally.errors,
+    }
 }
 
 /// Run each vendor uninstaller; only a genuine failure to run one is worth the
@@ -839,7 +901,14 @@ mod tests {
         let reason = driver_guard_reason("aswSP");
         assert!(reason.contains("aswSP"));
         assert!(reason.contains("Windows from starting"));
-        assert!(reason.contains("Safe Mode"));
+        assert!(
+            reason.contains("Restart Windows"),
+            "the fix is a normal restart, not Safe Mode: {reason}"
+        );
+        assert!(
+            !reason.contains("Safe Mode"),
+            "Safe Mode has no audio for a screen reader, so it must never be the advice: {reason}"
+        );
     }
 
     // ── ExecutionReport helpers ───────────────────────────────────────────────
@@ -1073,6 +1142,78 @@ mod tests {
     }
 
     #[test]
+    fn a_full_run_reports_progress_through_every_phase_up_to_the_action_count() {
+        // The Windows progress dialog looks the phase up by index and draws the
+        // bar from `completed / action_count`; if either drifts the dialog lies
+        // or freezes, which a screen-reader user cannot tell from a crash.
+        let plan = RemovalPlan::for_product(Product::Avast);
+        let mut phases = Vec::new();
+        let mut last_completed = 0;
+
+        let (report, _resume) = execute_full_with_progress(
+            &plan,
+            &ScriptedVendorUninstaller::nothing_registered(),
+            &StubExecutor::all_removed(),
+            &ScriptedForcefulExecutor::ownership_succeeds(),
+            &mut |phase, completed| {
+                if phases.last() != Some(&phase) {
+                    phases.push(phase);
+                }
+                assert!(completed > last_completed, "the count must only ever rise");
+                last_completed = completed;
+            },
+        );
+
+        assert_eq!(
+            phases,
+            vec![
+                RemovalPhase::ScheduledTasks,
+                RemovalPhase::Services,
+                RemovalPhase::Files,
+                RemovalPhase::Registry,
+            ],
+            "the sweep must report its phases in execution order"
+        );
+        assert_eq!(
+            last_completed,
+            plan.action_count(),
+            "progress must reach exactly the action count"
+        );
+        assert_eq!(last_completed, report.actions_attempted);
+    }
+
+    #[test]
+    fn a_registry_failure_with_nothing_deferred_is_an_error_not_a_restart() {
+        // Files all delete, so nothing is queued for reboot; a registry key that
+        // then fails has no pending restart to ride on, so it must be a hard
+        // error — not silently carried to a resume that will never happen.
+        let plan = mcafee_plan();
+        let stub = StubExecutor {
+            registry_outcome: ActionOutcome::Error("still locked".to_owned()),
+            file_outcome: ActionOutcome::Removed,
+            service_outcome: ActionOutcome::Removed,
+            task_outcome: ActionOutcome::Removed,
+        };
+
+        let (report, resume) = execute_full(
+            &plan,
+            &ScriptedVendorUninstaller::nothing_registered(),
+            &stub,
+            &ScriptedForcefulExecutor::ownership_succeeds(),
+        );
+
+        assert!(
+            resume.is_none(),
+            "no file was deferred, so there is nothing to resume"
+        );
+        assert!(
+            report.errors.iter().any(|e| e.contains("still locked")),
+            "the registry failure must surface as an error: {:?}",
+            report.errors
+        );
+    }
+
+    #[test]
     fn a_failed_vendor_uninstaller_is_a_warning_not_a_dead_end() {
         let plan = RemovalPlan::for_product(Product::Avast);
         let uninstall_key = plan.uninstall_keys().next().unwrap();
@@ -1099,6 +1240,34 @@ mod tests {
             "the vendor failure should be reported: {:?}",
             report.warnings
         );
+    }
+
+    // ── finish_resume: completing after a restart ────────────────────────────
+
+    #[test]
+    fn finishing_a_resume_deletes_the_pending_registry_and_confirms_the_files() {
+        let mut state = crate::resume::ResumeState::new(Product::Avast);
+        state.add_pending_file(r"C:\Program Files\AVAST Software");
+        state.add_pending_registry(r"HKLM\SOFTWARE\AVAST Software");
+
+        // The file was deleted at boot (NotFound now) and the key deletes: all
+        // done.
+        let report = finish_resume(&state, &StubExecutor::all_not_found());
+
+        assert!(report.fully_succeeded(), "{:?}", report.errors);
+        assert_eq!(report.actions_attempted, 2);
+        assert!(report.product_name.contains("Avast"));
+    }
+
+    #[test]
+    fn a_resume_whose_registry_still_fails_reports_the_error() {
+        let mut state = crate::resume::ResumeState::new(Product::McAfee);
+        state.add_pending_registry(r"HKLM\SOFTWARE\McAfee");
+
+        let report = finish_resume(&state, &StubExecutor::all_error("still locked"));
+
+        assert!(!report.fully_succeeded());
+        assert!(report.errors.iter().any(|e| e.contains("still locked")));
     }
 
     #[test]

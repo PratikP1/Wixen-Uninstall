@@ -15,6 +15,7 @@ pub mod menu;
 pub mod paths;
 pub mod plan;
 pub mod product;
+pub mod reboot;
 pub mod resume;
 pub mod stats_ini;
 pub mod ui;

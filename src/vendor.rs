@@ -71,6 +71,122 @@ fn probe_and_run(key: &str, vendor: &dyn VendorUninstaller) -> VendorOutcome {
     }
 }
 
+// ─── Reading a registry value (pure parsing + Windows I/O) ────────────────────
+
+/// The value names that hold an uninstall command, best first.  A
+/// `QuietUninstallString` is silent by definition, so it is preferred.
+///
+/// Called only from the Windows module, but kept out here — and un-gated — so
+/// the parsing below is tested on Linux; hence the non-Windows allow.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const UNINSTALL_VALUE_NAMES: &[&str] = &["QuietUninstallString", "UninstallString"];
+
+/// Extract the string value `value_name` from the text `reg.exe query` prints.
+///
+/// `reg query` output looks like:
+///
+/// ```text
+/// HKEY_LOCAL_MACHINE\…\Avast Antivirus
+///     QuietUninstallString    REG_SZ    "C:\…\Instup.exe" /silent
+/// ```
+///
+/// Pure and tested so the parsing is verified even though invoking `reg.exe` is
+/// not.  Returns `None` when the value is absent.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn parse_reg_query_value(output: &str, value_name: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        let trimmed = line.trim_start();
+        let rest = trimmed.strip_prefix(value_name)?;
+        // The value name must be followed by whitespace, or `UninstallString`
+        // would also match a line for `QuietUninstallString`.
+        if !rest.starts_with(char::is_whitespace) {
+            return None;
+        }
+        // ...<type>...<value>; the type is REG_SZ or REG_EXPAND_SZ.
+        let (_, after_type) = rest.split_once("REG_")?;
+        let value = after_type
+            .split_once(char::is_whitespace)
+            .map_or("", |(_, value)| value)
+            .trim();
+        (!value.is_empty()).then(|| value.to_owned())
+    })
+}
+
+/// The real vendor uninstaller.
+///
+/// Reads the uninstall string with `reg.exe query` — the same shell-out pattern
+/// the executor uses for `reg`/`sc`/`schtasks`, avoiding registry FFI — and runs
+/// the parsed command.  Off Windows it registers nothing and runs nothing.
+pub struct LiveVendorUninstaller;
+
+impl VendorUninstaller for LiveVendorUninstaller {
+    fn read_uninstall_string(&self, uninstall_key: &str) -> Option<String> {
+        #[cfg(target_os = "windows")]
+        {
+            windows::read_uninstall_string(uninstall_key)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = uninstall_key;
+            None
+        }
+    }
+
+    fn run(&self, command: &UninstallCommand) -> ActionOutcome {
+        #[cfg(target_os = "windows")]
+        {
+            windows::run(command)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = command;
+            ActionOutcome::NotFound
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::{UNINSTALL_VALUE_NAMES, parse_reg_query_value};
+    use crate::executor::ActionOutcome;
+    use crate::executor::windows::system_tool_path;
+    use crate::uninstall::UninstallCommand;
+    use std::process::Command;
+
+    /// Read the best available uninstall string for `uninstall_key`, preferring
+    /// `QuietUninstallString`.
+    pub fn read_uninstall_string(uninstall_key: &str) -> Option<String> {
+        let reg = system_tool_path("reg.exe").ok()?;
+        UNINSTALL_VALUE_NAMES.iter().find_map(|value_name| {
+            let output = Command::new(&reg)
+                .args(["query", uninstall_key, "/v", value_name])
+                .output()
+                .ok()?;
+            if !output.status.success() {
+                return None;
+            }
+            parse_reg_query_value(&String::from_utf8_lossy(&output.stdout), value_name)
+        })
+    }
+
+    /// Run a parsed uninstall command and report the outcome.
+    pub fn run(command: &UninstallCommand) -> ActionOutcome {
+        match Command::new(&command.program).args(&command.args).status() {
+            Ok(status) if status.success() => ActionOutcome::Removed,
+            Ok(status) => ActionOutcome::Error(format!(
+                "{} exited with {}",
+                command.program,
+                status
+                    .code()
+                    .map_or_else(|| "no exit code".to_owned(), |code| code.to_string())
+            )),
+            Err(error) => {
+                ActionOutcome::Error(format!("could not run {}: {error}", command.program))
+            }
+        }
+    }
+}
+
 // ─── Stub for tests ──────────────────────────────────────────────────────────
 
 /// A `VendorUninstaller` scripted with a fixed key→string map, recording every
@@ -222,6 +338,50 @@ mod tests {
             [VendorOutcome::Unparsable(_)]
         ));
         assert!(vendor.commands_run().is_empty());
+    }
+
+    // ── multiple keys ────────────────────────────────────────────────────────
+
+    // ── reg query output parsing ─────────────────────────────────────────────
+
+    const QUERY_OUTPUT: &str = "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\…\\Avast Antivirus\r\n    QuietUninstallString    REG_SZ    \"C:\\Program Files\\AVAST Software\\Avast\\setup\\Instup.exe\" /instop:uninstall /silent\r\n\r\n";
+
+    #[test]
+    fn a_quiet_uninstall_string_is_read_from_reg_output() {
+        let value = parse_reg_query_value(QUERY_OUTPUT, "QuietUninstallString")
+            .expect("the value is present");
+        assert_eq!(
+            value,
+            r#""C:\Program Files\AVAST Software\Avast\setup\Instup.exe" /instop:uninstall /silent"#
+        );
+    }
+
+    #[test]
+    fn an_absent_value_yields_none() {
+        assert_eq!(parse_reg_query_value(QUERY_OUTPUT, "UninstallString"), None);
+        assert_eq!(parse_reg_query_value("", "QuietUninstallString"), None);
+    }
+
+    #[test]
+    fn an_expand_sz_value_is_read_too() {
+        let output = "    UninstallString    REG_EXPAND_SZ    %ProgramFiles%\\X\\uninst.exe /S\n";
+        assert_eq!(
+            parse_reg_query_value(output, "UninstallString").as_deref(),
+            Some(r"%ProgramFiles%\X\uninst.exe /S")
+        );
+    }
+
+    #[test]
+    fn the_value_name_must_be_followed_by_whitespace() {
+        // `UninstallString` must not match the `QuietUninstallString` line.
+        let output = "    QuietUninstallString    REG_SZ    quiet-value\n";
+        assert_eq!(parse_reg_query_value(output, "UninstallString"), None);
+    }
+
+    #[test]
+    fn a_value_name_with_no_value_yields_none() {
+        let output = "    UninstallString    REG_SZ    \n";
+        assert_eq!(parse_reg_query_value(output, "UninstallString"), None);
     }
 
     // ── multiple keys ────────────────────────────────────────────────────────
