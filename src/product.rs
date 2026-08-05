@@ -44,6 +44,19 @@ impl Product {
             .copied()
     }
 
+    /// The canonical lowercase slug, e.g. `"mcafee"`.
+    ///
+    /// Stable across releases: it names the product in the resume state written
+    /// before a reboot, so it must round-trip with [`Product::from_slug`].
+    pub fn slug(self) -> &'static str {
+        match self {
+            Product::McAfee => "mcafee",
+            Product::Norton => "norton",
+            Product::Avast => "avast",
+            Product::Avg => "avg",
+        }
+    }
+
     /// Parse from a canonical lowercase slug (for example `"mcafee"` or `"avg"`).
     ///
     /// Case-insensitive.  Returns `None` for unknown slugs.
@@ -280,5 +293,23 @@ mod tests {
         for (i, &product) in Product::all().iter().enumerate() {
             assert_eq!(Product::from_menu_index(i + 1), Some(product));
         }
+    }
+
+    #[test]
+    fn slug_round_trips_through_from_slug_for_every_product() {
+        // The resume state written before a reboot names the product by slug,
+        // so a mismatch here would resume as the wrong product — or not at all.
+        for &product in Product::all() {
+            assert_eq!(Product::from_slug(product.slug()), Some(product));
+        }
+    }
+
+    #[test]
+    fn slugs_are_distinct() {
+        let mut slugs: Vec<&str> = Product::all().iter().map(|p| p.slug()).collect();
+        let count = slugs.len();
+        slugs.sort_unstable();
+        slugs.dedup();
+        assert_eq!(slugs.len(), count, "two products share a slug");
     }
 }
