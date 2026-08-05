@@ -46,6 +46,70 @@ impl ExecutionReport {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn system_tool_path(executable_name: &str) -> std::io::Result<std::path::PathBuf> {
+    let system_root = std::env::var_os("SystemRoot").ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("SystemRoot is not set; cannot locate {executable_name}"),
+        )
+    })?;
+
+    Ok(std::path::PathBuf::from(system_root)
+        .join("System32")
+        .join(executable_name))
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn command_output_text(stdout: &[u8], stderr: &[u8]) -> String {
+    let stdout = String::from_utf8_lossy(stdout);
+    let stderr = String::from_utf8_lossy(stderr);
+    let stdout = stdout.trim();
+    let stderr = stderr.trim();
+
+    match (stdout, stderr) {
+        ("", "") => String::new(),
+        (stdout, "") => stdout.to_owned(),
+        ("", stderr) => stderr.to_owned(),
+        (stdout, stderr) if stdout == stderr => stdout.to_owned(),
+        (stdout, stderr) => format!("{stdout}\n{stderr}"),
+    }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> bool {
+    let needle = needle.as_bytes();
+    !needle.is_empty()
+        && haystack
+            .as_bytes()
+            .windows(needle.len())
+            .any(|window| window.eq_ignore_ascii_case(needle))
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn classify_windows_command_result(
+    success: bool,
+    stdout: &[u8],
+    stderr: &[u8],
+    not_found_markers: &[&str],
+) -> ActionOutcome {
+    if success {
+        return ActionOutcome::Removed;
+    }
+
+    let output = command_output_text(stdout, stderr);
+    if not_found_markers
+        .iter()
+        .any(|marker| contains_ascii_case_insensitive(&output, marker))
+    {
+        ActionOutcome::NotFound
+    } else if output.is_empty() {
+        ActionOutcome::Error("command failed without output".to_owned())
+    } else {
+        ActionOutcome::Error(output)
+    }
+}
+
 // ─── Executor trait ───────────────────────────────────────────────────────────
 
 /// Abstracts the low-level OS calls so that tests can inject a stub.
@@ -158,33 +222,36 @@ impl Executor for LiveExecutor {
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use super::ActionOutcome;
+    use super::{ActionOutcome, classify_windows_command_result, system_tool_path};
     use crate::plan::{FilePath, RegistryEntry, ScheduledTask, ServiceEntry};
     use std::process::Command;
 
     pub fn delete_registry_entry(entry: &RegistryEntry) -> ActionOutcome {
-        let mut command = Command::new("reg");
+        let reg = match system_tool_path("reg.exe") {
+            Ok(path) => path,
+            Err(error) => return ActionOutcome::Error(error.to_string()),
+        };
+
+        let mut command = Command::new(reg);
         command.args(["delete", &entry.key_path]);
         if let Some(value_name) = &entry.value_name {
             command.args(["/v", value_name]);
         }
         command.arg("/f");
 
-        let output = command.output();
-        match output {
-            Ok(o) if o.status.success() => ActionOutcome::Removed,
-            Ok(o) if o.status.code() == Some(1) => ActionOutcome::NotFound,
-            Ok(o) => ActionOutcome::Error(String::from_utf8_lossy(&o.stderr).into_owned()),
+        match command.output() {
+            Ok(o) => classify_windows_command_result(
+                o.status.success(),
+                &o.stdout,
+                &o.stderr,
+                &["unable to find the specified registry key or value", "unable to find"],
+            ),
             Err(e) => ActionOutcome::Error(e.to_string()),
         }
     }
 
     pub fn delete_file_path(fp: &FilePath) -> ActionOutcome {
-        use std::path::Path;
-        let p = Path::new(&fp.path);
-        if !p.exists() {
-            return ActionOutcome::NotFound;
-        }
+        let p = std::path::Path::new(&fp.path);
         let result = if fp.is_dir {
             std::fs::remove_dir_all(p)
         } else {
@@ -192,39 +259,47 @@ mod windows {
         };
         match result {
             Ok(()) => ActionOutcome::Removed,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => ActionOutcome::NotFound,
             Err(e) => ActionOutcome::Error(e.to_string()),
         }
     }
 
     pub fn stop_and_delete_service(svc: &ServiceEntry) -> ActionOutcome {
-        // Stop first (ignore errors — may already be stopped).
-        let _ = Command::new("sc").args(["stop", &svc.name]).output();
+        let sc = match system_tool_path("sc.exe") {
+            Ok(path) => path,
+            Err(error) => return ActionOutcome::Error(error.to_string()),
+        };
 
-        let output = Command::new("sc").args(["delete", &svc.name]).output();
-        match output {
-            Ok(o) if o.status.success() => ActionOutcome::Removed,
-            Ok(o) if String::from_utf8_lossy(&o.stderr).contains("does not exist") => {
-                ActionOutcome::NotFound
-            }
-            Ok(o) => ActionOutcome::Error(String::from_utf8_lossy(&o.stderr).into_owned()),
+        // Stop first (ignore errors — may already be stopped).
+        let _ = Command::new(&sc).args(["stop", &svc.name]).output();
+
+        match Command::new(&sc).args(["delete", &svc.name]).output() {
+            Ok(o) => classify_windows_command_result(
+                o.status.success(),
+                &o.stdout,
+                &o.stderr,
+                &["FAILED 1060", "does not exist as an installed service"],
+            ),
             Err(e) => ActionOutcome::Error(e.to_string()),
         }
     }
 
     pub fn delete_scheduled_task(task: &ScheduledTask) -> ActionOutcome {
-        let output = Command::new("schtasks")
+        let schtasks = match system_tool_path("schtasks.exe") {
+            Ok(path) => path,
+            Err(error) => return ActionOutcome::Error(error.to_string()),
+        };
+
+        let output = Command::new(schtasks)
             .args(["/Delete", "/TN", &task.task_path, "/F"])
             .output();
         match output {
-            Ok(o) if o.status.success() => ActionOutcome::Removed,
-            Ok(o)
-                if String::from_utf8_lossy(&o.stdout)
-                    .to_lowercase()
-                    .contains("cannot find") =>
-            {
-                ActionOutcome::NotFound
-            }
-            Ok(o) => ActionOutcome::Error(String::from_utf8_lossy(&o.stderr).into_owned()),
+            Ok(o) => classify_windows_command_result(
+                o.status.success(),
+                &o.stdout,
+                &o.stderr,
+                &["0x80070002", "cannot find"],
+            ),
             Err(e) => ActionOutcome::Error(e.to_string()),
         }
     }
@@ -309,6 +384,60 @@ mod tests {
     #[test]
     fn removed_is_success() {
         assert!(ActionOutcome::Removed.is_success());
+    }
+
+    #[test]
+    fn command_output_text_prefers_non_empty_stream() {
+        assert_eq!(
+            command_output_text(b"ok", b""),
+            "ok",
+            "stdout-only output should be preserved"
+        );
+        assert_eq!(
+            command_output_text(b"", b"fail"),
+            "fail",
+            "stderr-only output should be preserved"
+        );
+    }
+
+    #[test]
+    fn command_output_text_combines_distinct_streams() {
+        assert_eq!(command_output_text(b"one", b"two"), "one\ntwo");
+        assert_eq!(command_output_text(b"same", b"same"), "same");
+    }
+
+    #[test]
+    fn classify_windows_command_result_detects_not_found_in_stdout() {
+        assert_eq!(
+            classify_windows_command_result(
+                false,
+                b"[SC] OpenService FAILED 1060:",
+                b"",
+                &["FAILED 1060"],
+            ),
+            ActionOutcome::NotFound
+        );
+    }
+
+    #[test]
+    fn classify_windows_command_result_detects_not_found_in_stderr() {
+        assert_eq!(
+            classify_windows_command_result(
+                false,
+                b"",
+                b"ERROR: The system was unable to find the specified registry key or value.",
+                &["unable to find the specified registry key or value"],
+            ),
+            ActionOutcome::NotFound
+        );
+    }
+
+    #[test]
+    fn classify_windows_command_result_returns_error_when_marker_missing() {
+        assert_eq!(
+            classify_windows_command_result(false, b"", b"Access is denied.", &["FAILED 1060"]),
+            ActionOutcome::Error("Access is denied.".into())
+        );
     }
 
     #[test]

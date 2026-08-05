@@ -132,9 +132,20 @@ cargo +nightly fuzz run fuzz_from_menu_index -- -max_total_time=60
 ### Build the Windows installer
 
 1. Compile the release binary (see above).
-2. Open `wixen_uninstall.iss` in the Inno Setup Compiler.
+2. Open `wixen_uninstall.iss` in the Inno Setup Compiler. The script auto-detects
+   either `target\x86_64-pc-windows-msvc\release` or `target\release`, and CI
+   can override `AppVersion`, `BinaryDir`, and `OutputDir` with `ISCC /D...`
+   arguments.
 3. Click **Build > Compile** (or press `F9`).
 4. The installer is written to `installer_output/`.
+
+### CI
+
+- `.github/workflows/ci.yml` runs `cargo test --locked --features test-utils`
+  on Linux and Windows.
+- The same workflow builds the Windows release binary, compiles
+  `wixen_uninstall.iss`, and uploads `installer_output/WixenUninstaller-Setup-*.exe`
+  as a GitHub Actions artifact.
 
 ---
 

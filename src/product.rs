@@ -38,19 +38,28 @@ impl Product {
     ///
     /// Returns `None` when the index is out of range or zero.
     pub fn from_menu_index(index: usize) -> Option<Product> {
-        Product::all().get(index.wrapping_sub(1)).copied()
+        index
+            .checked_sub(1)
+            .and_then(|menu_index| Product::all().get(menu_index))
+            .copied()
     }
 
     /// Parse from a canonical lowercase slug (for example `"mcafee"` or `"avg"`).
     ///
     /// Case-insensitive.  Returns `None` for unknown slugs.
     pub fn from_slug(slug: &str) -> Option<Product> {
-        match slug.trim().to_lowercase().as_str() {
-            "mcafee" => Some(Product::McAfee),
-            "norton" => Some(Product::Norton),
-            "avast" => Some(Product::Avast),
-            "avg" => Some(Product::Avg),
-            _ => None,
+        let trimmed = slug.trim();
+
+        if trimmed.eq_ignore_ascii_case("mcafee") {
+            Some(Product::McAfee)
+        } else if trimmed.eq_ignore_ascii_case("norton") {
+            Some(Product::Norton)
+        } else if trimmed.eq_ignore_ascii_case("avast") {
+            Some(Product::Avast)
+        } else if trimmed.eq_ignore_ascii_case("avg") {
+            Some(Product::Avg)
+        } else {
+            None
         }
     }
 
@@ -145,6 +154,11 @@ mod tests {
     #[test]
     fn menu_index_out_of_range_is_none() {
         assert_eq!(Product::from_menu_index(99), None);
+    }
+
+    #[test]
+    fn menu_index_usize_max_is_none() {
+        assert_eq!(Product::from_menu_index(usize::MAX), None);
     }
 
     // ── from_slug ────────────────────────────────────────────────────────────

@@ -11,13 +11,34 @@
 ;        cargo build --release --target x86_64-pc-windows-msvc
 ;   3. Open this .iss file in the Inno Setup Compiler and click Build > Compile.
 
-#define AppName      "Wixen Uninstaller"
-#define AppVersion   "0.1.0"
-#define AppPublisher "PratikP1"
-#define AppURL       "https://github.com/PratikP1/Wixen-Uninstall"
-#define AppExeName   "wixen_uninstall.exe"
-#define HelpFileName "WixenUninstallerHelp.html"
-#define BinaryDir    "target\release"
+#ifndef AppName
+  #define AppName      "Wixen Uninstaller"
+#endif
+#ifndef AppVersion
+  #define AppVersion   "0.1.0"
+#endif
+#ifndef AppPublisher
+  #define AppPublisher "PratikP1"
+#endif
+#ifndef AppURL
+  #define AppURL       "https://github.com/PratikP1/Wixen-Uninstall"
+#endif
+#ifndef AppExeName
+  #define AppExeName   "wixen_uninstall.exe"
+#endif
+#ifndef HelpFileName
+  #define HelpFileName "WixenUninstallerHelp.html"
+#endif
+#ifndef BinaryDir
+  #ifexist "target\x86_64-pc-windows-msvc\release\wixen_uninstall.exe"
+    #define BinaryDir "target\x86_64-pc-windows-msvc\release"
+  #else
+    #define BinaryDir "target\release"
+  #endif
+#endif
+#ifndef OutputDir
+  #define OutputDir ".\installer_output"
+#endif
 
 [Setup]
 AppId={{A7C3D2F1-8E4B-4C9A-B5D6-1F2E3A4B5C6D}
@@ -31,7 +52,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=WixenUninstaller-Setup-{#AppVersion}
-OutputDir=.\installer_output
+OutputDir={#OutputDir}
 Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern

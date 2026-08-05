@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run test suite
+        run: cargo test --locked --features test-utils
+
+  build-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    needs: test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Read package version
+        id: package
+        shell: pwsh
+        run: |
+          $versionLine = Select-String -Path Cargo.toml -Pattern '^version = "(.+)"$' | Select-Object -First 1
+          if (-not $versionLine) {
+            throw "Unable to read version from Cargo.toml"
+          }
+
+          $version = $versionLine.Matches[0].Groups[1].Value
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build release binary
+        run: cargo build --locked --release --target x86_64-pc-windows-msvc
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) {
+            throw "ISCC.exe not found at $compiler"
+          }
+
+          & $compiler `
+            "/DAppVersion=${{ steps.package.outputs.version }}" `
+            '/DBinaryDir=target\x86_64-pc-windows-msvc\release' `
+            '/DOutputDir=installer_output' `
+            'wixen_uninstall.iss'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wixen-installer-${{ steps.package.outputs.version }}
+          path: installer_output/WixenUninstaller-Setup-*.exe
+          if-no-files-found: error
