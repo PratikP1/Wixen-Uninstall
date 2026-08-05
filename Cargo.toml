@@ -1,0 +1,36 @@
+[package]
+name = "wixen_uninstall"
+version = "0.1.0"
+edition = "2024"
+authors = ["PratikP1"]
+description = "A user-friendly, accessible uninstaller for McAfee and Norton"
+license = "MIT"
+
+[[bin]]
+name = "wixen_uninstall"
+path = "src/main.rs"
+
+[lib]
+name = "wixen_uninstall_lib"
+path = "src/lib.rs"
+
+[dependencies]
+# No runtime dependencies — the library core is pure Rust.
+# The Windows-specific uninstall calls are gated behind #[cfg(target_os = "windows")].
+
+[dev-dependencies]
+# mutation testing: cargo install cargo-mutants
+# fuzz testing:    cargo install cargo-fuzz  (requires nightly)
+
+[features]
+# Exposes StubExecutor for integration tests and external test crates.
+test-utils = []
+
+# Enable test-utils automatically when running integration tests.
+[profile.test]
+opt-level = 0
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+required-features = ["test-utils"]

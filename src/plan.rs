@@ -1,0 +1,344 @@
+//! Removal plan — pure data describing *what* would be removed.
+//!
+//! Author: PratikP1
+//!
+//! The plan is built from static knowledge of where McAfee and Norton store
+//! their files, registry keys, services, and scheduled tasks.  Nothing is
+//! deleted here; the executor module consumes the plan.
+
+use crate::product::Product;
+
+// ─── Domain types ────────────────────────────────────────────────────────────
+
+/// A Windows registry key (or value) that should be deleted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegistryEntry {
+    /// E.g. `"HKLM\\SOFTWARE\\McAfee"`.
+    pub key_path: String,
+    /// `None` means delete the whole key; `Some(name)` deletes a single value.
+    pub value_name: Option<String>,
+}
+
+impl RegistryEntry {
+    /// Convenience constructor for deleting an entire key.
+    pub fn key(path: impl Into<String>) -> Self {
+        Self {
+            key_path: path.into(),
+            value_name: None,
+        }
+    }
+
+    /// Convenience constructor for deleting a single named value.
+    pub fn value(path: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            key_path: path.into(),
+            value_name: Some(name.into()),
+        }
+    }
+}
+
+/// A filesystem path (file or directory) that should be deleted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilePath {
+    /// Absolute Windows path, e.g. `"C:\\Program Files\\McAfee"`.
+    pub path: String,
+    /// When `true` the entry is a directory; recursive deletion is used.
+    pub is_dir: bool,
+}
+
+impl FilePath {
+    pub fn file(path: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            is_dir: false,
+        }
+    }
+
+    pub fn dir(path: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            is_dir: true,
+        }
+    }
+}
+
+/// A Windows service name that should be stopped and deleted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServiceEntry {
+    pub name: String,
+}
+
+impl ServiceEntry {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+}
+
+/// A Windows Scheduled Task path that should be deleted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScheduledTask {
+    /// Task path as shown in Task Scheduler, e.g. `"\\McAfee\\..."`.
+    pub task_path: String,
+}
+
+impl ScheduledTask {
+    pub fn new(task_path: impl Into<String>) -> Self {
+        Self {
+            task_path: task_path.into(),
+        }
+    }
+}
+
+// ─── Removal plan ────────────────────────────────────────────────────────────
+
+/// Everything that will be removed for a given product.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemovalPlan {
+    pub product: Product,
+    pub registry_entries: Vec<RegistryEntry>,
+    pub file_paths: Vec<FilePath>,
+    pub services: Vec<ServiceEntry>,
+    pub scheduled_tasks: Vec<ScheduledTask>,
+}
+
+impl RemovalPlan {
+    /// Build the complete removal plan for `product`.
+    pub fn for_product(product: Product) -> Self {
+        match product {
+            Product::McAfee => mcafee_plan(),
+            Product::Norton => norton_plan(),
+        }
+    }
+
+    /// Total number of removal actions.
+    pub fn action_count(&self) -> usize {
+        self.registry_entries.len()
+            + self.file_paths.len()
+            + self.services.len()
+            + self.scheduled_tasks.len()
+    }
+
+    /// `true` when the plan has at least one action.
+    pub fn is_non_empty(&self) -> bool {
+        self.action_count() > 0
+    }
+}
+
+// ─── McAfee knowledge base ───────────────────────────────────────────────────
+
+fn mcafee_plan() -> RemovalPlan {
+    RemovalPlan {
+        product: Product::McAfee,
+        registry_entries: vec![
+            RegistryEntry::key(r"HKLM\SOFTWARE\McAfee"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\McAfee"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\McShield"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\McAfee WebAdvisor"),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee Total Protection",
+            ),
+            RegistryEntry::key(r"HKCU\SOFTWARE\McAfee"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\McAfee.com"),
+        ],
+        file_paths: vec![
+            FilePath::dir(r"C:\Program Files\McAfee"),
+            FilePath::dir(r"C:\Program Files (x86)\McAfee"),
+            FilePath::dir(r"C:\ProgramData\McAfee"),
+            FilePath::dir(r"C:\Users\All Users\McAfee"),
+            FilePath::dir(r"C:\Program Files\Common Files\McAfee"),
+            FilePath::dir(r"C:\Program Files (x86)\Common Files\McAfee"),
+            FilePath::file(r"C:\Windows\System32\drivers\mfehidk.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\mfefirek.sys"),
+            FilePath::file(r"C:\Windows\System32\drivers\mfewfpk.sys"),
+        ],
+        services: vec![
+            ServiceEntry::new("McShield"),
+            ServiceEntry::new("McAfeeEngineService"),
+            ServiceEntry::new("McAfee WebAdvisor"),
+            ServiceEntry::new("mfemms"),
+            ServiceEntry::new("mfefire"),
+        ],
+        scheduled_tasks: vec![
+            ScheduledTask::new(r"\McAfee\McAfee Auto Maintenance"),
+            ScheduledTask::new(r"\McAfee\McAfeeLogon"),
+        ],
+    }
+}
+
+// ─── Norton knowledge base ───────────────────────────────────────────────────
+
+fn norton_plan() -> RemovalPlan {
+    RemovalPlan {
+        product: Product::Norton,
+        registry_entries: vec![
+            RegistryEntry::key(r"HKLM\SOFTWARE\Norton"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\Norton"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\Symantec"),
+            RegistryEntry::key(r"HKLM\SOFTWARE\WOW6432Node\Symantec"),
+            RegistryEntry::key(r"HKLM\SYSTEM\CurrentControlSet\Services\NortonSecurity"),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton 360",
+            ),
+            RegistryEntry::key(r"HKCU\SOFTWARE\Norton"),
+            RegistryEntry::key(r"HKCU\SOFTWARE\Symantec"),
+        ],
+        file_paths: vec![
+            FilePath::dir(r"C:\Program Files\Norton Security"),
+            FilePath::dir(r"C:\Program Files\Norton 360"),
+            FilePath::dir(r"C:\Program Files (x86)\Norton Security"),
+            FilePath::dir(r"C:\Program Files (x86)\Norton 360"),
+            FilePath::dir(r"C:\ProgramData\Norton"),
+            FilePath::dir(r"C:\ProgramData\Symantec"),
+            FilePath::dir(r"C:\Program Files\Common Files\Symantec Shared"),
+            FilePath::dir(r"C:\Program Files (x86)\Common Files\Symantec Shared"),
+            FilePath::file(r"C:\Windows\System32\drivers\NortonSecurity.sys"),
+        ],
+        services: vec![
+            ServiceEntry::new("NortonSecurity"),
+            ServiceEntry::new("NortonSecurityPlatformIDS"),
+            ServiceEntry::new("Symantec Event Manager"),
+            ServiceEntry::new("Symantec Settings Manager"),
+        ],
+        scheduled_tasks: vec![
+            ScheduledTask::new(r"\Norton Security\Norton Error Processor"),
+            ScheduledTask::new(r"\Norton Security\Norton Error Submitter"),
+            ScheduledTask::new(r"\Symantec\Norton Update Manager"),
+        ],
+    }
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── RegistryEntry ────────────────────────────────────────────────────────
+
+    #[test]
+    fn registry_key_has_no_value_name() {
+        let e = RegistryEntry::key(r"HKLM\SOFTWARE\McAfee");
+        assert_eq!(e.key_path, r"HKLM\SOFTWARE\McAfee");
+        assert!(e.value_name.is_none());
+    }
+
+    #[test]
+    fn registry_value_stores_name() {
+        let e = RegistryEntry::value(r"HKLM\SOFTWARE\McAfee", "Version");
+        assert_eq!(e.value_name.as_deref(), Some("Version"));
+    }
+
+    // ── FilePath ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn file_path_is_not_dir() {
+        let f = FilePath::file(r"C:\Windows\System32\mfehidk.sys");
+        assert!(!f.is_dir);
+    }
+
+    #[test]
+    fn dir_path_is_dir() {
+        let d = FilePath::dir(r"C:\Program Files\McAfee");
+        assert!(d.is_dir);
+    }
+
+    // ── RemovalPlan::action_count ────────────────────────────────────────────
+
+    #[test]
+    fn mcafee_plan_is_non_empty() {
+        let plan = RemovalPlan::for_product(Product::McAfee);
+        assert!(plan.is_non_empty());
+    }
+
+    #[test]
+    fn norton_plan_is_non_empty() {
+        let plan = RemovalPlan::for_product(Product::Norton);
+        assert!(plan.is_non_empty());
+    }
+
+    #[test]
+    fn mcafee_plan_has_registry_entries() {
+        let plan = RemovalPlan::for_product(Product::McAfee);
+        assert!(!plan.registry_entries.is_empty());
+    }
+
+    #[test]
+    fn mcafee_plan_has_file_paths() {
+        let plan = RemovalPlan::for_product(Product::McAfee);
+        assert!(!plan.file_paths.is_empty());
+    }
+
+    #[test]
+    fn mcafee_plan_has_services() {
+        let plan = RemovalPlan::for_product(Product::McAfee);
+        assert!(!plan.services.is_empty());
+    }
+
+    #[test]
+    fn norton_plan_has_registry_entries() {
+        let plan = RemovalPlan::for_product(Product::Norton);
+        assert!(!plan.registry_entries.is_empty());
+    }
+
+    #[test]
+    fn norton_plan_has_services() {
+        let plan = RemovalPlan::for_product(Product::Norton);
+        assert!(!plan.services.is_empty());
+    }
+
+    #[test]
+    fn norton_plan_has_scheduled_tasks() {
+        let plan = RemovalPlan::for_product(Product::Norton);
+        assert!(!plan.scheduled_tasks.is_empty());
+    }
+
+    #[test]
+    fn action_count_equals_sum_of_parts() {
+        let plan = RemovalPlan::for_product(Product::McAfee);
+        let expected = plan.registry_entries.len()
+            + plan.file_paths.len()
+            + plan.services.len()
+            + plan.scheduled_tasks.len();
+        assert_eq!(plan.action_count(), expected);
+    }
+
+    #[test]
+    fn plan_product_field_matches_requested_product() {
+        assert_eq!(
+            RemovalPlan::for_product(Product::McAfee).product,
+            Product::McAfee
+        );
+        assert_eq!(
+            RemovalPlan::for_product(Product::Norton).product,
+            Product::Norton
+        );
+    }
+
+    #[test]
+    fn mcafee_registry_entries_all_start_with_hk() {
+        for entry in &RemovalPlan::for_product(Product::McAfee).registry_entries {
+            assert!(
+                entry.key_path.starts_with("HK"),
+                "Registry key should start with HK: {}",
+                entry.key_path
+            );
+        }
+    }
+
+    #[test]
+    fn file_paths_start_with_drive_letter_or_backslash() {
+        for plan in [
+            RemovalPlan::for_product(Product::McAfee),
+            RemovalPlan::for_product(Product::Norton),
+        ] {
+            for fp in &plan.file_paths {
+                let first = fp.path.chars().next().unwrap_or(' ');
+                assert!(
+                    first == 'C' || first == '\\',
+                    "Path should be absolute: {}",
+                    fp.path
+                );
+            }
+        }
+    }
+}
