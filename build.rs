@@ -35,12 +35,20 @@ fn main() {
     // `/MANIFESTUAC:NO` stops the linker generating its own trustInfo block,
     // which would collide with the requestedExecutionLevel in our manifest.
     //
-    // The path is quoted because a checkout under, say, `C:\Users\Jane Doe\`
-    // reaches the linker through a response file when the command line grows
-    // long, and there the spaces would split the option in two.
+    // Do not quote the path. Each link argument reaches link.exe as one argv
+    // element, and link.exe then takes everything after the colon literally —
+    // so `/MANIFESTINPUT:"C:\...\x.manifest"` makes it look for a file whose
+    // name begins with a quote:
+    //
+    //     LINK : fatal error LNK1104: cannot open file '"D:\a\...\x.manifest"'
+    //
+    // Paths containing spaces are already handled without quoting here: Rust's
+    // `Command` escapes the argument when it builds the command line, and rustc
+    // escapes it again if the link is long enough to go through a response
+    // file.
     println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
     println!(
-        "cargo:rustc-link-arg-bins=/MANIFESTINPUT:\"{}\"",
+        "cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}",
         manifest.display()
     );
     println!("cargo:rustc-link-arg-bins=/MANIFESTUAC:NO");
