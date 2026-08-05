@@ -3,7 +3,7 @@ name = "wixen_uninstall"
 version = "0.1.0"
 edition = "2024"
 authors = ["PratikP1"]
-description = "A user-friendly, accessible uninstaller for McAfee and Norton"
+description = "A user-friendly, accessible uninstaller for stubborn consumer security suites"
 license = "MIT"
 
 [[bin]]

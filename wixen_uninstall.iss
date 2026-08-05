@@ -35,6 +35,10 @@ Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+; Explicitly target supported Windows releases and 64-bit installs.
+MinVersion=10.0
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 
 ; Require Administrator — the uninstaller must run elevated.
 PrivilegesRequired=admin

@@ -139,12 +139,35 @@ fn mcafee_plan() -> RemovalPlan {
             RegistryEntry::key(
                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee Total Protection",
             ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee LiveSafe",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee WebAdvisor",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\McAfee WebAdvisor",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee SiteAdvisor",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\McAfee SiteAdvisor",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\McAfee.WPS",
+            ),
             RegistryEntry::key(r"HKCU\SOFTWARE\McAfee"),
             RegistryEntry::key(r"HKLM\SOFTWARE\McAfee.com"),
         ],
         file_paths: vec![
             FilePath::dir(r"C:\Program Files\McAfee"),
             FilePath::dir(r"C:\Program Files (x86)\McAfee"),
+            FilePath::dir(r"C:\Program Files\McAfee.com"),
+            FilePath::dir(r"C:\Program Files (x86)\McAfee.com"),
+            FilePath::dir(r"C:\Program Files\McAfee\WebAdvisor"),
+            FilePath::dir(r"C:\Program Files (x86)\McAfee\WebAdvisor"),
+            FilePath::dir(r"C:\Program Files (x86)\McAfee\SiteAdvisor"),
             FilePath::dir(r"C:\ProgramData\McAfee"),
             FilePath::dir(r"C:\Users\All Users\McAfee"),
             FilePath::dir(r"C:\Program Files\Common Files\McAfee"),
@@ -163,6 +186,7 @@ fn mcafee_plan() -> RemovalPlan {
         scheduled_tasks: vec![
             ScheduledTask::new(r"\McAfee\McAfee Auto Maintenance"),
             ScheduledTask::new(r"\McAfee\McAfeeLogon"),
+            ScheduledTask::new(r"\McAfee\McAfee WebAdvisor"),
         ],
     }
 }
@@ -181,14 +205,35 @@ fn norton_plan() -> RemovalPlan {
             RegistryEntry::key(
                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton 360",
             ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Secure VPN",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Norton Secure VPN",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Norton Utilities Ultimate",
+            ),
             RegistryEntry::key(r"HKCU\SOFTWARE\Norton"),
             RegistryEntry::key(r"HKCU\SOFTWARE\Symantec"),
         ],
         file_paths: vec![
             FilePath::dir(r"C:\Program Files\Norton Security"),
             FilePath::dir(r"C:\Program Files\Norton 360"),
+            FilePath::dir(r"C:\Program Files\Norton"),
+            FilePath::dir(r"C:\Program Files\Norton Secure VPN"),
+            FilePath::dir(r"C:\Program Files\Norton Utilities"),
             FilePath::dir(r"C:\Program Files (x86)\Norton Security"),
             FilePath::dir(r"C:\Program Files (x86)\Norton 360"),
+            FilePath::dir(r"C:\Program Files (x86)\Norton"),
+            FilePath::dir(r"C:\Program Files (x86)\Norton Secure VPN"),
+            FilePath::dir(r"C:\Program Files (x86)\Norton Utilities"),
             FilePath::dir(r"C:\ProgramData\Norton"),
             FilePath::dir(r"C:\ProgramData\Symantec"),
             FilePath::dir(r"C:\Program Files\Common Files\Symantec Shared"),
@@ -228,11 +273,30 @@ fn avast_plan() -> RemovalPlan {
             RegistryEntry::key(
                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Antivirus",
             ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Secure Browser",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Avast Secure Browser",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Cleanup",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Cleanup Premium",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Avast Driver Updater",
+            ),
             RegistryEntry::key(r"HKCU\SOFTWARE\AVAST Software"),
         ],
         file_paths: vec![
+            FilePath::dir(r"C:\Program Files\AVAST Software"),
             FilePath::dir(r"C:\Program Files\AVAST Software\Avast"),
+            FilePath::dir(r"C:\Program Files (x86)\AVAST Software"),
             FilePath::dir(r"C:\Program Files (x86)\AVAST Software\Avast"),
+            FilePath::dir(r"C:\Program Files (x86)\AVAST Software\Browser"),
+            FilePath::dir(r"C:\Program Files\Common Files\Avast Software"),
             FilePath::dir(r"C:\ProgramData\AVAST Software"),
             FilePath::dir(r"C:\ProgramData\AVAST Software\Avast\log"),
             FilePath::dir(r"C:\ProgramData\AVAST Software\Avast\setup"),
@@ -277,13 +341,30 @@ fn avg_plan() -> RemovalPlan {
             RegistryEntry::key(
                 r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Antivirus",
             ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Secure Browser",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\AVG Secure Browser",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG PC TuneUp",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG TuneUp",
+            ),
+            RegistryEntry::key(
+                r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AVG Driver Updater",
+            ),
             RegistryEntry::key(r"HKCU\SOFTWARE\AVG"),
         ],
         file_paths: vec![
+            FilePath::dir(r"C:\Program Files\AVG"),
             FilePath::dir(r"C:\Program Files\AVG\Antivirus"),
             FilePath::dir(r"C:\Program Files (x86)\AVG"),
             FilePath::dir(r"C:\ProgramData\AVG"),
             FilePath::dir(r"C:\ProgramData\AVG\Antivirus"),
+            FilePath::dir(r"C:\ProgramData\TuneUp Software"),
             FilePath::file(r"C:\Windows\System32\drivers\avgSP.sys"),
             FilePath::file(r"C:\Windows\System32\drivers\avgMonFlt.sys"),
             FilePath::file(r"C:\Windows\System32\drivers\avgRdr.sys"),
@@ -401,15 +482,68 @@ mod tests {
     }
 
     #[test]
+    fn mcafee_plan_covers_livesafe_and_webadvisor() {
+        let plan = RemovalPlan::for_product(Product::McAfee);
+        assert!(plan.registry_entries.iter().any(|entry| {
+            entry.key_path.contains("McAfee LiveSafe")
+                || entry.key_path.contains("McAfee WebAdvisor")
+        }));
+        assert!(
+            plan.file_paths
+                .iter()
+                .any(|entry| entry.path.contains(r"McAfee.com")
+                    || entry.path.contains(r"SiteAdvisor"))
+        );
+    }
+
+    #[test]
+    fn norton_plan_covers_vpn_and_utilities() {
+        let plan = RemovalPlan::for_product(Product::Norton);
+        assert!(plan.registry_entries.iter().any(|entry| {
+            entry.key_path.contains("Norton Secure VPN")
+                || entry.key_path.contains("Norton Utilities")
+        }));
+        assert!(plan.file_paths.iter().any(|entry| {
+            entry.path.contains(r"Norton Secure VPN") || entry.path.contains(r"Norton Utilities")
+        }));
+    }
+
+    #[test]
     fn avast_plan_has_scheduled_tasks() {
         let plan = RemovalPlan::for_product(Product::Avast);
         assert!(!plan.scheduled_tasks.is_empty());
     }
 
     #[test]
+    fn avast_plan_covers_browser_and_cleanup() {
+        let plan = RemovalPlan::for_product(Product::Avast);
+        assert!(plan.registry_entries.iter().any(|entry| {
+            entry.key_path.contains("Avast Secure Browser")
+                || entry.key_path.contains("Avast Cleanup")
+        }));
+        assert!(plan.file_paths.iter().any(|entry| {
+            entry.path.contains(r"AVAST Software\Browser")
+                || entry.path.contains(r"Common Files\Avast Software")
+        }));
+    }
+
+    #[test]
     fn avg_plan_has_scheduled_tasks() {
         let plan = RemovalPlan::for_product(Product::Avg);
         assert!(!plan.scheduled_tasks.is_empty());
+    }
+
+    #[test]
+    fn avg_plan_covers_browser_and_tuneup() {
+        let plan = RemovalPlan::for_product(Product::Avg);
+        assert!(plan.registry_entries.iter().any(|entry| {
+            entry.key_path.contains("AVG Secure Browser")
+                || entry.key_path.contains("AVG PC TuneUp")
+                || entry.key_path.contains("AVG TuneUp")
+        }));
+        assert!(plan.file_paths.iter().any(|entry| {
+            entry.path.contains(r"C:\Program Files\AVG") || entry.path.contains(r"TuneUp Software")
+        }));
     }
 
     #[test]

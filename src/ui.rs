@@ -88,13 +88,15 @@ fn selection_prompt_text(products: &[Product], has_more: bool) -> String {
         text.push_str("Cancel — Quit");
     }
 
+    text.push_str("\n\nKeyboard: Tab / Shift+Tab moves between buttons. Enter or Space activates the focused button. Esc selects Cancel.");
+
     text
 }
 
 #[cfg(any(test, target_os = "windows"))]
 fn confirmation_prompt_text(plan: &RemovalPlan) -> String {
     let mut text = format!(
-        "Ready to remove {}.\n\nThis will attempt {} action(s) and requires Administrator privileges.\n\nSelect OK to start or Cancel to go back.",
+        "Ready to remove {}.\n\nThis will attempt {} action(s) and requires Administrator privileges.\n\nKeyboard: Tab / Shift+Tab moves between OK and Cancel. Enter or Space activates the focused button. Esc goes back.",
         plan.product.display_name(),
         plan.action_count()
     );
@@ -265,6 +267,8 @@ mod tests {
         assert!(text.contains(Product::McAfee.display_name()));
         assert!(text.contains(Product::Norton.display_name()));
         assert!(text.contains("More products"));
+        assert!(text.contains("Tab / Shift+Tab"));
+        assert!(text.contains("Esc"));
     }
 
     #[test]
@@ -276,12 +280,22 @@ mod tests {
     }
 
     #[test]
+    fn selection_prompt_single_product_includes_keyboard_guidance() {
+        let text = selection_prompt_text(&[Product::McAfee], false);
+        assert!(text.contains("OK"));
+        assert!(text.contains("Enter or Space"));
+        assert!(text.contains("Esc"));
+    }
+
+    #[test]
     fn confirmation_prompt_includes_action_count() {
         let plan = RemovalPlan::for_product(Product::McAfee);
         let text = confirmation_prompt_text(&plan);
         assert!(text.contains(Product::McAfee.display_name()));
         assert!(text.contains(&plan.action_count().to_string()));
         assert!(text.contains("Administrator"));
+        assert!(text.contains("Enter or Space"));
+        assert!(text.contains("Esc"));
     }
 
     #[test]
