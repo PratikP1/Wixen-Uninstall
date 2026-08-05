@@ -2,9 +2,17 @@
 name = "wixen_uninstall"
 version = "0.1.0"
 edition = "2024"
+# Let-chains (`if let … && let …`) are stable from 1.88 in the 2024 edition.
+rust-version = "1.88"
 authors = ["PratikP1"]
 description = "A user-friendly, accessible uninstaller for stubborn consumer security suites"
+repository = "https://github.com/PratikP1/Wixen-Uninstall"
+readme = "README.md"
+keywords = ["uninstaller", "antivirus", "windows", "accessibility"]
+categories = ["command-line-utilities"]
 license = "MIT"
+# Embeds the Windows manifest that makes the app request Administrator.
+build = "build.rs"
 
 [[bin]]
 name = "wixen_uninstall"
@@ -26,11 +34,25 @@ path = "src/lib.rs"
 # Exposes StubExecutor for integration tests and external test crates.
 test-utils = []
 
-# Enable test-utils automatically when running integration tests.
 [profile.test]
 opt-level = 0
 
+[profile.release]
+# A single self-contained executable that users download over the internet:
+# smaller is friendlier, and there is nothing to debug in the shipped binary.
+lto = true
+codegen-units = 1
+strip = "symbols"
+
+# Requires `--features test-utils`; `cargo test` alone skips this target, so CI
+# and the README always pass the feature explicitly.
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
 required-features = ["test-utils"]
+
+# Drives the compiled binary over a pipe, which is the only way to cover `main`
+# and the stdio dispatch in `ui`. Needs no features of its own.
+[[test]]
+name = "cli"
+path = "tests/cli.rs"

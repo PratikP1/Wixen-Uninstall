@@ -44,10 +44,17 @@
 AppId={{A7C3D2F1-8E4B-4C9A-B5D6-1F2E3A4B5C6D}
 AppName={#AppName}
 AppVersion={#AppVersion}
+AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}/issues
 AppUpdatesURL={#AppURL}/releases
 UninstallDisplayIcon={app}\{#AppExeName}
+; Shown in Add or Remove Programs.
+VersionInfoVersion={#AppVersion}
+VersionInfoCompany={#AppPublisher}
+VersionInfoDescription={#AppName} Setup
+VersionInfoProductName={#AppName}
+LicenseFile=LICENSE
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -85,15 +92,17 @@ Source: "docs\{#HelpFileName}"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 ; Human-readable Markdown documentation for the install folder.
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
-; Start-menu shortcut - runs elevated automatically.
+; The executable's manifest requests Administrator, so both shortcuts trigger
+; the UAC prompt on launch without any extra flags here.
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Parameters: ""; \
     WorkingDir: "{app}"; \
     Comment: "Remove stubborn antivirus suites completely"
 
-Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Tasks: desktopicon; \
     Comment: "Remove stubborn antivirus suites completely"
 

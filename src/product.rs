@@ -63,6 +63,19 @@ impl Product {
         }
     }
 
+    /// The same-vendor extras this product's cleanup also sweeps up.
+    ///
+    /// Shown beneath the product name on its selection button, so the choice
+    /// can be made without opening the help file.
+    pub fn companion_note(self) -> &'static str {
+        match self {
+            Product::McAfee => "Also removes LiveSafe, WebAdvisor, and SiteAdvisor leftovers.",
+            Product::Norton => "Also removes Norton Secure VPN and Norton Utilities leftovers.",
+            Product::Avast => "Also removes Avast Secure Browser and Avast Cleanup leftovers.",
+            Product::Avg => "Also removes AVG Secure Browser and AVG TuneUp leftovers.",
+        }
+    }
+
     /// Extra guidance shown before uninstalling products with self-protection.
     pub fn pre_removal_note(self) -> Option<&'static str> {
         match self {
@@ -217,6 +230,37 @@ mod tests {
         );
         assert_eq!(format!("{}", Product::Avast), Product::Avast.display_name());
         assert_eq!(format!("{}", Product::Avg), Product::Avg.display_name());
+    }
+
+    #[test]
+    fn companion_notes_name_that_vendor_s_own_extras() {
+        assert!(Product::McAfee.companion_note().contains("WebAdvisor"));
+        assert!(Product::Norton.companion_note().contains("Secure VPN"));
+        assert!(
+            Product::Avast
+                .companion_note()
+                .contains("Avast Secure Browser")
+        );
+        assert!(Product::Avg.companion_note().contains("AVG TuneUp"));
+    }
+
+    #[test]
+    fn every_companion_note_is_distinct_and_usable_as_a_button_subtitle() {
+        let notes: Vec<&str> = Product::all()
+            .iter()
+            .map(|product| product.companion_note())
+            .collect();
+
+        for (product, note) in Product::all().iter().zip(&notes) {
+            assert!(!note.is_empty(), "{product} needs a companion note");
+            assert!(note.ends_with('.'), "{product}: {note}");
+            assert!(!note.contains('\n'), "{product}: a subtitle is one line");
+        }
+
+        let mut unique = notes.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), notes.len(), "notes must not be duplicated");
     }
 
     #[test]

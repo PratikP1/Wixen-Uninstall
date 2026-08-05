@@ -1,0 +1,16 @@
+# Mutants that survive on purpose, checked by CI.
+#
+# Every entry here must be an *equivalent* mutant — one where the mutated
+# program is identical to the original, so no test could ever tell them apart.
+# Anything else surviving is a gap in the tests and must fail the build.
+#
+# Lines are the contents of `mutants.out/missed.txt` with the line and column
+# numbers stripped, so the list survives edits elsewhere in the file.
+#
+# `|` and `^` agree whenever their operands share no bits. Both entries below
+# are ORs of disjoint bit sets, and each has a test asserting that disjointness
+# (`the_always_on_flags_share_no_bits`, `make_range_operands_never_overlap`),
+# so if a future change makes the operands overlap, that test fails and the OR
+# starts carrying real weight again.
+src/ui/task_dialog.rs: replace | with ^ in Dialog::flags
+src/ui/task_dialog.rs: replace | with ^ in make_range

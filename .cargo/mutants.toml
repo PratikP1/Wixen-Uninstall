@@ -1,0 +1,42 @@
+# cargo-mutants configuration
+# Author: PratikP1
+#
+# The path matters: cargo-mutants only reads `.cargo/mutants.toml`.
+#
+# Run mutation testing with:
+#   cargo mutants
+#
+# cargo-mutants docs: https://mutants.rs
+
+# Build with the test-utils feature so StubExecutor is available to the
+# integration tests, which is where most mutants are caught.
+features = ["test-utils"]
+
+# Skip the Windows-only modules. They are compiled out on Linux, so no test can
+# execute a mutant inside them and every one would be reported as missed.
+# cargo-mutants names mutants by their innermost module path, so one pattern
+# covers executor::windows, ui::windows, and elevation::windows.
+exclude_re = [
+    "windows::",
+    # `is_elevated` returns a literal `true` off Windows, so its mutant is
+    # equivalent code that no Linux test can distinguish.
+    "is_elevated",
+    # `show_error` only runs when `is_elevated` says no, which off Windows it
+    # never does, so no Linux test can reach it.
+    "show_error",
+    # The helpers in `ui/task_dialog.rs` that actually call into comctl32.
+    # Everything else in that file — the builder, the flag maths, the struct
+    # layout, the UTF-16 conversion — is portable and stays in scope.
+    "Dialog::show",
+    "invoke",
+    "set_help_handler",
+    "show_progress",
+    "update_progress",
+    "\\bsend\\b",
+]
+
+# `ui/windows.rs` is the only file left out: it is pure Win32 drawing, compiled
+# out on Linux, and what it *says* is decided by the tested functions in
+# `ui.rs`. `main.rs` and `ui/task_dialog.rs` are both covered — `main` through
+# `tests/cli.rs`, which drives the real binary over a pipe.
+exclude_globs = ["src/ui/windows.rs"]

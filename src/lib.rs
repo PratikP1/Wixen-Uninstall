@@ -7,8 +7,10 @@
 //! service stops) is always behind `#[cfg(target_os = "windows")]` so that
 //! the entire test suite can be run on any platform.
 
+pub mod elevation;
 pub mod executor;
 pub mod menu;
+pub mod paths;
 pub mod plan;
 pub mod product;
 pub mod ui;
