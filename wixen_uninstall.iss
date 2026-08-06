@@ -100,11 +100,11 @@ Source: "LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversi
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Parameters: ""; \
     WorkingDir: "{app}"; \
-    Comment: "Remove stubborn, misbehaving Windows apps completely"
+    Comment: "Completely remove stubborn apps that resist a normal uninstall"
 
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Tasks: desktopicon; \
-    Comment: "Remove stubborn, misbehaving Windows apps completely"
+    Comment: "Completely remove stubborn apps that resist a normal uninstall"
 
 [Run]
 ; Offer to launch immediately after install.

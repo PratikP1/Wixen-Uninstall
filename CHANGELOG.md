@@ -57,16 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
-- The escalation's Windows-only I/O (the SYSTEM relaunch via `schtasks`, invoking
-  the vendor uninstaller, take-ownership/`icacls`, `MoveFileEx`, and the
-  `RunOnce` write) compiles and is linted on `x86_64-pc-windows-msvc`, but **CI
-  cannot prove it works** against a real installed application. Every decision it drives — the
-  command-line contract, the results serialization, the escalation choices — is
-  unit- and mutation-tested on Linux against stubs; the effects are unverified
-  until run on a Windows machine with the product installed. In particular the
-  session-0 SYSTEM relaunch and the cross-process report hand-off have not been
-  exercised on hardware. This must not be described as verified, or ship in a
-  tagged release, before that test.
+- The escalation's Windows-only I/O (the SYSTEM relaunch via `schtasks`,
+  invoking the vendor uninstaller, take-ownership/`icacls`, `MoveFileEx`, and
+  the `RunOnce` write) compiles and is linted on `x86_64-pc-windows-msvc`, but
+  **CI cannot prove it works** against a real installed application. Every
+  decision it drives — the command-line contract, the results serialization,
+  the escalation choices — is unit- and mutation-tested on Linux against stubs;
+  the effects are unverified until run on a Windows machine with the product
+  installed. In particular the session-0 SYSTEM relaunch and the cross-process
+  report hand-off have not been exercised on hardware. This must not be
+  described as verified, or ship in a tagged release, before that test.
 
 ## [0.4.0] - 2026-08-05
 
