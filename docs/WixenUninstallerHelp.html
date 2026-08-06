@@ -58,10 +58,11 @@
   <main>
     <h1>Wixen Uninstaller Help</h1>
     <p>
-      Wixen Uninstaller removes stubborn, misbehaving Windows applications — and
-      the leftover companion products they leave behind — from 64-bit Windows 10
-      and Windows 11 systems. It ships today with definitions for the security
-      suites listed below; the same removal steps apply to any supported product.
+      Wixen Uninstaller removes stubborn, misbehaving Windows applications, along
+      with the leftover companion products they leave behind, from 64-bit
+      Windows 10 and Windows 11 systems. It ships today with definitions for the
+      security suites listed below, and the same removal steps apply to any
+      supported product.
     </p>
 
     <h2>Keyboard shortcuts</h2>
@@ -77,8 +78,8 @@
       </li>
       <li><kbd>Enter</kbd> or <kbd>Space</kbd> activates the focused control.</li>
       <li>
-        <kbd>Alt</kbd> plus the underlined letter activates a button directly —
-        <kbd>Alt+R</kbd> for <strong>Remove it</strong>, for example.
+        <kbd>Alt</kbd> plus the underlined letter activates a button directly.
+        For example, <kbd>Alt+R</kbd> activates <strong>Remove it</strong>.
       </li>
       <li><kbd>Esc</kbd> cancels the current screen or quits.</li>
       <li><kbd>F1</kbd> opens this help file from any Wixen screen.</li>
@@ -157,7 +158,7 @@
         something alone. This happens when a driver file could not be removed
         safely: its service was still registered, and deleting the file anyway
         could stop Windows from starting. Restart Windows and run Wixen again to
-        finish clearing it — a normal restart usually releases the service's
+        finish clearing it. A normal restart usually releases the service's
         hold.
       </li>
     </ul>
@@ -165,9 +166,9 @@
     <h2>Self-protecting products (Avast and AVG)</h2>
     <p>
       Avast and AVG load a kernel driver that blocks removal while Windows is
-      running normally. You do <strong>not</strong> need Safe Mode — which is
-      important, because Windows 10 often loads no audio driver in Safe Mode, so
-      a screen reader cannot start there. Wixen handles this automatically:
+      running normally. You do <strong>not</strong> need Safe Mode. That matters,
+      because Windows 10 often loads no audio driver in Safe Mode, so a screen
+      reader cannot start there. Wixen handles this automatically:
     </p>
     <ul>
       <li>
@@ -181,7 +182,7 @@
       <li>
         If files were queued, Wixen registers itself to run once more
         automatically after you restart, to finish the cleanup. Just restart
-        Windows normally when it is convenient — your screen reader and audio
+        Windows normally when it is convenient. Your screen reader and audio
         work as usual, and you do not need to do anything else.
       </li>
     </ul>
@@ -192,9 +193,9 @@
       anything already removed is reported as already gone rather than an error.
     </p>
     <p>
-      So if an earlier run — or an older version of Wixen — left part of a
-      product behind, just run Wixen again. It re-attempts the whole removal with
-      its full set of steps (the product's own uninstaller, taking ownership of
+      So if an earlier run, or an older version of Wixen, left part of a product
+      behind, just run Wixen again. It re-attempts the whole removal with its full
+      set of steps (the product's own uninstaller, taking ownership of
       locked-down files, boot-time deletion, and running with the highest
       privilege) and clears most of what was left. Finishing may take a
       <strong>restart</strong>: anything still locked is queued for deletion

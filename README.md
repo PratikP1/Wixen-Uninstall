@@ -1,13 +1,13 @@
 # Wixen-Uninstall
 
 A user-friendly, totally accessible, bullshit-free uninstaller for stubborn,
-misbehaving Windows applications — the kind that resist a normal uninstall by
-locking files, denying permissions, scattering leftovers, or actively defending
-themselves. It ships today with built-in definitions for four notoriously
-stubborn security suites — McAfee, Norton, Avast, and AVG — plus the companion
-browser, VPN, cleanup, and tune-up add-ons that linger after them. The removal
-engine is general, though: every app goes through the same escalation, and the
-catalog of supported products is meant to grow.
+misbehaving Windows applications. These are the apps that resist a normal
+uninstall by locking their files, denying permissions, scattering leftovers, or
+actively defending themselves. It ships today with built-in definitions for four
+notoriously stubborn security suites (McAfee, Norton, Avast, and AVG), plus the
+companion browser, VPN, cleanup, and tune-up add-ons that linger after them. The
+removal engine is general, though: every app goes through the same escalation,
+and the catalog of supported products is meant to grow.
 
 **Author:** PratikP1
 
@@ -48,10 +48,10 @@ catalog of supported products is meant to grow.
   file is left alone and reported as skipped, because deleting the image of a
   still-registered boot-start driver can stop Windows from starting.
 - **Handles apps that fight back, without Safe Mode.** Some applications resist
-  removal — locking their files, denying permissions, or loading a kernel driver
-  that blocks deletion while Windows runs (Avast and AVG are the standout case).
-  Rather than sending you to Safe Mode — where Windows 10 often loads no audio
-  driver, so a screen reader cannot start — Wixen runs the app's *own* silent
+  removal. They lock their files, deny permissions, or load a kernel driver that
+  blocks deletion while Windows runs (Avast and AVG are the standout case). Safe
+  Mode would get around that, but Windows 10 often loads no audio driver there,
+  so a screen reader cannot start. Instead, Wixen runs the app's *own* silent
   uninstaller, elevates to `NT AUTHORITY\SYSTEM` where Administrator is not
   enough, takes ownership of permission-locked leftovers, and queues anything
   still locked for deletion during the next **normal** restart, then finishes the
@@ -66,7 +66,7 @@ catalog of supported products is meant to grow.
 - Wixen itself is cleanly uninstallable through the standard Windows
   **Add or Remove Programs** flow.
 - Tested with red/green TDD, and checked with mutation testing
-  (`cargo-mutants`) and fuzzing (`cargo-fuzz`) — both enforced in CI, so a
+  (`cargo-mutants`) and fuzzing (`cargo-fuzz`), both enforced in CI, so a
   behaviour that no test pins down fails the build.
 
 ---
@@ -77,8 +77,8 @@ catalog of supported products is meant to grow.
 |---|---------|-------|
 | 1 | McAfee Total Protection | Also removes common McAfee LiveSafe and WebAdvisor / SiteAdvisor leftovers |
 | 2 | Norton 360 / Norton Security | Also removes common Norton Secure VPN and Norton Utilities leftovers |
-| 3 | Avast Antivirus / Avast Premium Security | Also removes common Avast Secure Browser and Avast Cleanup leftovers; self-protection is handled automatically — no Safe Mode |
-| 4 | AVG AntiVirus / AVG Internet Security | Also removes common AVG Secure Browser and AVG TuneUp leftovers; self-protection is handled automatically — no Safe Mode |
+| 3 | Avast Antivirus / Avast Premium Security | Also removes common Avast Secure Browser and Avast Cleanup leftovers; self-protection is handled automatically, no Safe Mode needed |
+| 4 | AVG AntiVirus / AVG Internet Security | Also removes common AVG Secure Browser and AVG TuneUp leftovers; self-protection is handled automatically, no Safe Mode needed |
 
 Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen-Uninstall/issues)
 
@@ -113,20 +113,21 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
    skipped for safety; expand **Show details** for the full list.
 8. For self-protecting products (Avast, AVG), Wixen runs the product's own
    uninstaller and, if any file is still locked, queues it for removal during
-   the next restart — no Safe Mode. If files were queued, Wixen registers itself
-   to finish automatically after you restart.
-9. **Restart Windows** to finish the cleanup — removing kernel drivers and
+   the next restart, with no need for Safe Mode. If files were queued, Wixen
+   registers itself to finish automatically after you restart.
+9. **Restart Windows** to finish the cleanup. Removing kernel drivers and
    services only fully takes effect after a reboot, and any queued files are
    deleted then.
 
 **Running it again is safe.** Wixen re-checks every target on each run, and
 anything already gone is reported as already removed rather than an error. So if
-an earlier run — or an older version of Wixen — left part of a product behind,
-just run it again: it re-attempts the whole removal with its full escalation
-(the product's own uninstaller, take-ownership, boot-time deletion, and running
-as SYSTEM) and clears most of what was left. Finishing may take a **restart**,
-since anything still locked is queued for boot-time deletion and Wixen resumes
-on its own after a normal reboot.
+an earlier run, or an older version of Wixen, left part of a product behind,
+just run it again. It re-attempts the whole removal with its full escalation:
+running the product's own uninstaller, taking ownership of permission-locked
+files, boot-time deletion, and running as `NT AUTHORITY\SYSTEM`. That clears most
+of what was left. Finishing may take a **restart**, since anything still locked
+is queued for boot-time deletion and Wixen resumes on its own after a normal
+reboot.
 
 > **Note:** The tool must be run with Administrator privileges.  Both the
 > installer and the installed application request elevation, so Windows prompts
@@ -183,11 +184,11 @@ The suite is in three layers:
 |---|---|
 | unit tests in `src/` | pure logic: plans, path resolution, screen wording, the dialog builder and its Win32 struct layout |
 | `tests/integration.rs` | the executor pipeline end to end against a stub: boot-safety guards, error accumulation, progress ordering |
-| `tests/cli.rs` | the real compiled binary, driven over a pipe — the only way to reach `main` and the stdio dispatch in `ui` |
+| `tests/cli.rs` | the real compiled binary, driven over a pipe, the only way to reach `main` and the stdio dispatch in `ui` |
 
 ### Lint
 
-Clippy must be run against the Windows target too — the Win32 modules are
+Clippy must be run against the Windows target too, because the Win32 modules are
 compiled out on Linux, so host-only linting cannot see them.
 
 ```sh
@@ -210,7 +211,7 @@ cargo install cargo-mutants
 ```
 
 A **surviving mutant** means the code could be changed that way and the suite
-would still pass — so that behaviour is not really covered. The fix is to write
+would still pass, so that behaviour is not really covered. The fix is to write
 the test that fails without it.
 
 `.cargo/mutants-baseline.txt` lists the handful of survivors that are tolerated.
@@ -219,8 +220,8 @@ genuinely identical and no test could tell the difference, and each carries a
 comment saying why. Adding to that file is a deliberate, reviewable act; the
 default answer to a survivor is a new test.
 
-Configuration lives in `.cargo/mutants.toml` — that exact path, which is the
-only one cargo-mutants reads. It enables the `test-utils` feature and skips the
+Configuration lives in `.cargo/mutants.toml`. That exact path is the only one
+cargo-mutants reads. It enables the `test-utils` feature and skips the
 code that calls into the Win32 API, which is compiled out on Linux and could
 never be covered there.
 
@@ -268,7 +269,7 @@ what Wixen is willing to delete recursively.
 
 ```sh
 # 1. Bump the version in Cargo.toml and add a CHANGELOG entry.
-# 2. Tag it — the workflow refuses to publish if the tag and Cargo.toml
+# 2. Tag it. The workflow refuses to publish if the tag and Cargo.toml
 #    version disagree.
 git tag v0.5.0
 git push origin v0.5.0
@@ -352,7 +353,7 @@ prove it resolves at run time.
 `executor::execute` always runs in this order, and the order is load-bearing:
 
 1. **Scheduled tasks**, so a self-repair task cannot reinstate what comes next.
-2. **Services**, releasing file handles and — critically — deregistering
+2. **Services**, releasing file handles and, critically, deregistering
    drivers before their images are touched.
 3. **Files**, with guarded driver images skipped if step 2 failed for them.
 4. **Registry keys**, which is what finally makes the product invisible to
@@ -361,12 +362,13 @@ prove it resolves at run time.
 ### How apps that resist removal are handled
 
 `executor::execute_full` wraps that sweep in an escalation ladder so removal
-never needs Safe Mode — where Windows 10 often has no audio and a screen reader
-cannot start. The whole run prefers to execute as `NT AUTHORITY\SYSTEM` (via a
-transient scheduled task), reaching artifacts an Administrator cannot touch; if
-that relaunch cannot be arranged it falls back to running in-process under
-Administrator. First it runs the app's **own silent uninstaller** (read from the
-registry, never guessed), which can undo whatever the app did to defend itself.
+never needs Safe Mode. In Safe Mode, Windows 10 often has no audio and a screen
+reader cannot start. The whole run prefers to execute as `NT AUTHORITY\SYSTEM`
+(via a transient scheduled task), reaching artifacts an Administrator cannot
+touch; if that relaunch cannot be arranged it falls back to running in-process
+under Administrator. First it runs the app's **own silent uninstaller** (read
+from the registry, never guessed), which can undo whatever the app did to
+defend itself.
 Then the guarded sweep above runs. Each file the sweep cannot delete is
 escalated one rung at a time by `forceful::resolve_file`, whose every branch is
 chosen by the pure `escalation::next_step`:

@@ -384,7 +384,7 @@ pub fn report_footer(report: &ExecutionReport) -> Option<&'static str> {
 pub fn restart_scheduled_body() -> &'static str {
     "The last few files defend themselves while Windows is running, so Wixen has \
      queued them to be deleted as Windows restarts. It will then run once, on its \
-     own, to finish clearing up. Restart Windows when you are ready — you do not \
+     own, to finish clearing up. Restart Windows when you are ready. You do not \
      need to do anything else."
 }
 
@@ -398,7 +398,7 @@ pub fn system_wait_body(product: Product) -> String {
     format!(
         "Removing {} with the highest privilege Windows allows, so nothing it \
          protects can block the removal. This can take a few minutes. Wixen will \
-         show the results on its own when it finishes — you do not need to do \
+         show the results on its own when it finishes. You do not need to do \
          anything.",
         product.display_name()
     )
