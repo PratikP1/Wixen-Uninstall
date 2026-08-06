@@ -90,7 +90,7 @@ The automated removal of self-defending products is new in this release. Its
 decisions are covered by unit and mutation tests, but its effect against a live
 installation has not yet been verified on a Windows machine with one of these
 suites installed. If a removal leaves something behind, the report names exactly
-what remains; restart and run Wixen again, or file an issue.
+what remains, so you can run Wixen again or file an issue.
 
 ## Requirements
 
