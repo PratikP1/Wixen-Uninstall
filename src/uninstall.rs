@@ -335,6 +335,19 @@ mod tests {
         assert_eq!(command.args, vec!["/remove"]);
     }
 
+    #[test]
+    fn a_bare_msiexec_with_no_product_code_is_a_non_silent_passthrough() {
+        // The fuzzer found "MSIEXEC.EXE": with no product code it is not an MSI
+        // string, so it is passed through as an ordinary program rather than
+        // normalized. It carries no silent switch, so `is_silent` is false and
+        // the vendor step never runs it — which is why a bare msiexec is safe to
+        // parse at face value.
+        let command = UninstallCommand::parse("MSIEXEC.EXE").unwrap();
+        assert_eq!(command.program, "MSIEXEC.EXE");
+        assert!(command.args.is_empty());
+        assert!(!command.is_silent(), "a bare msiexec must not be run");
+    }
+
     // ── silence detection ────────────────────────────────────────────────────
 
     #[test]
