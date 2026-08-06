@@ -26,7 +26,7 @@ pub fn is_elevated() -> bool {
 
 /// Message shown when Wixen is started without Administrator rights.
 pub const NOT_ELEVATED_MESSAGE: &str = concat!(
-    "Wixen Uninstaller needs Administrator privileges to remove security software.\n\n",
+    "Wixen Uninstaller needs Administrator privileges to remove stubborn software.\n\n",
     "Close this window, then right-click Wixen Uninstaller and choose ",
     "\"Run as administrator\".\n\n",
     "No changes have been made to your system.",

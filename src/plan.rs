@@ -2,9 +2,11 @@
 //!
 //! Author: PratikP1
 //!
-//! The plan is built from static knowledge of where supported security suites
-//! store their files, registry keys, services, and scheduled tasks.  Nothing
-//! is deleted here; the executor module consumes the plan.
+//! The plan is built from static knowledge of where each supported product
+//! stores its files, registry keys, services, and scheduled tasks.  The
+//! products shipped today happen to be stubborn security suites, but the plan
+//! is just data — any application can be described the same way.  Nothing is
+//! deleted here; the executor module consumes the plan.
 //!
 //! File templates use the placeholders defined in [`crate::paths`] rather than
 //! a literal `C:\`, and every expanded path is validated before it enters the

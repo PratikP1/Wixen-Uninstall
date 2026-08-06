@@ -1,6 +1,8 @@
-Wixen Uninstaller removes stubborn consumer security suites — and the companion
-browsers, VPNs, and tune-up tools that linger after the official uninstaller
-claims to be done.
+Wixen Uninstaller removes stubborn, misbehaving Windows applications — and the
+companion browsers, VPNs, and tune-up tools that linger after the official
+uninstaller claims to be done. It ships today with definitions for four
+notoriously stubborn security suites; the removal engine is general, and the
+list is meant to grow.
 
 ## Supported products
 
@@ -13,7 +15,7 @@ claims to be done.
 
 ## Installing
 
-1. Download `WixenUninstaller-Setup-0.4.0.exe` below.
+1. Download `WixenUninstaller-Setup-0.5.0.exe` below.
 2. Windows SmartScreen will warn you, because the installer is not code-signed.
    Verify the download against the `.sha256` file first, then choose **More
    info → Run anyway**.
@@ -24,7 +26,7 @@ claims to be done.
 Verify your download:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.4.0.exe
+Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.5.0.exe
 ```
 
 ## Accessibility
