@@ -1,11 +1,11 @@
 [package]
 name = "wixen_uninstall"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 # Let-chains (`if let … && let …`) are stable from 1.88 in the 2024 edition.
 rust-version = "1.88"
 authors = ["PratikP1"]
-description = "A user-friendly, accessible uninstaller for stubborn consumer security suites"
+description = "A user-friendly, accessible uninstaller for stubborn, misbehaving Windows applications"
 repository = "https://github.com/PratikP1/Wixen-Uninstall"
 readme = "README.md"
 keywords = ["uninstaller", "antivirus", "windows", "accessibility"]

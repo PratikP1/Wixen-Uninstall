@@ -1,8 +1,13 @@
 # Wixen-Uninstall
 
-A user-friendly, totally accessible, bullshit-free uninstaller for stubborn
-security products like McAfee, Norton, Avast, and AVG, plus the companion
-browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
+A user-friendly, totally accessible, bullshit-free uninstaller for stubborn,
+misbehaving Windows applications — the kind that resist a normal uninstall by
+locking files, denying permissions, scattering leftovers, or actively defending
+themselves. It ships today with built-in definitions for four notoriously
+stubborn security suites — McAfee, Norton, Avast, and AVG — plus the companion
+browser, VPN, cleanup, and tune-up add-ons that linger after them. The removal
+engine is general, though: every app goes through the same escalation, and the
+catalog of supported products is meant to grow.
 
 **Author:** PratikP1
 
@@ -36,20 +41,21 @@ browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
 - Requests Administrator on launch via an embedded application manifest, so the
   Start-menu shortcut triggers a UAC prompt instead of silently failing every
   removal action.
-- Deletes self-healing scheduled tasks before services and file paths so
-  stubborn suites like Avast and AVG cannot immediately reinstall themselves
-  during cleanup.
+- Deletes self-healing scheduled tasks before services and file paths so a
+  stubborn app cannot immediately reinstall itself during cleanup.
 - **Will not brick your boot.** A kernel driver's `.sys` file is only deleted
-  once its service has been removed. If self-protection blocks the service, the
-  driver file is left alone and reported as skipped, because deleting the image
-  of a still-registered boot-start driver can stop Windows from starting.
-- **Handles self-protection without Safe Mode.** Avast and AVG load a kernel
-  driver that blocks removal while Windows runs normally. Rather than sending you
-  to Safe Mode — where Windows 10 often loads no audio driver, so a screen reader
-  cannot start — Wixen runs the product's *own* silent uninstaller, takes
-  ownership of permission-locked leftovers, and queues anything still locked for
-  deletion during the next **normal** restart, then finishes the job
-  automatically after you reboot.
+  once its service has been removed. If the service cannot be removed, the driver
+  file is left alone and reported as skipped, because deleting the image of a
+  still-registered boot-start driver can stop Windows from starting.
+- **Handles apps that fight back, without Safe Mode.** Some applications resist
+  removal — locking their files, denying permissions, or loading a kernel driver
+  that blocks deletion while Windows runs (Avast and AVG are the standout case).
+  Rather than sending you to Safe Mode — where Windows 10 often loads no audio
+  driver, so a screen reader cannot start — Wixen runs the app's *own* silent
+  uninstaller, elevates to `NT AUTHORITY\SYSTEM` where Administrator is not
+  enough, takes ownership of permission-locked leftovers, and queues anything
+  still locked for deletion during the next **normal** restart, then finishes the
+  job automatically after you reboot.
 - **Follows your actual Windows layout.** Locations are resolved from
   `%ProgramFiles%`, `%ProgramData%`, and `%SystemRoot%` rather than assuming
   `C:\`, and every target is validated before deletion: drive roots, Windows,
@@ -122,7 +128,7 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
 > file published alongside it, then choose **More info > Run anyway**:
 >
 > ```powershell
-> Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.4.0.exe
+> Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.5.0.exe
 > ```
 >
 > **Help file:** The installer places `WixenUninstallerHelp.html` next to the
@@ -255,8 +261,8 @@ what Wixen is willing to delete recursively.
 # 1. Bump the version in Cargo.toml and add a CHANGELOG entry.
 # 2. Tag it — the workflow refuses to publish if the tag and Cargo.toml
 #    version disagree.
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 The workflow re-runs the full check suite, builds the installer, generates a
@@ -343,13 +349,16 @@ prove it resolves at run time.
 4. **Registry keys**, which is what finally makes the product invisible to
    Windows.
 
-### How stubborn, self-protecting products are handled
+### How apps that resist removal are handled
 
 `executor::execute_full` wraps that sweep in an escalation ladder so removal
 never needs Safe Mode — where Windows 10 often has no audio and a screen reader
-cannot start. First it runs the product's **own silent uninstaller** (read from
-the registry, never guessed), which can switch off self-protection from the
-inside. Then the guarded sweep above runs. Each file the sweep cannot delete is
+cannot start. The whole run prefers to execute as `NT AUTHORITY\SYSTEM` (via a
+transient scheduled task), reaching artifacts an Administrator cannot touch; if
+that relaunch cannot be arranged it falls back to running in-process under
+Administrator. First it runs the app's **own silent uninstaller** (read from the
+registry, never guessed), which can undo whatever the app did to defend itself.
+Then the guarded sweep above runs. Each file the sweep cannot delete is
 escalated one rung at a time by `forceful::resolve_file`, whose every branch is
 chosen by the pure `escalation::next_step`:
 

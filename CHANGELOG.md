@@ -7,15 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-06
+
 ### Added
 
-- **Automated removal of self-protecting products, without Safe Mode.** Avast
-  and AVG load a kernel driver that blocks removal while Windows runs normally.
-  The previous advice was to reboot into Safe Mode — but Windows 10 often loads
-  no audio driver there, so a screen-reader user cannot start speech and is
-  stranded. Removal now escalates automatically in normal mode instead:
-  - runs the product's own silent uninstaller, read from the registry and never
-    guessed, which can disarm self-protection from the inside;
+- **Automated removal of stubborn, self-defending applications, without Safe
+  Mode.** Some apps resist removal — locking files, denying permissions, or
+  loading a kernel driver that blocks deletion while Windows runs (Avast and AVG
+  are the standout case). The old advice for the hardest of them was to reboot
+  into Safe Mode — but Windows 10 often loads no audio driver there, so a
+  screen-reader user cannot start speech and is stranded. Removal now escalates
+  automatically in normal mode instead:
+  - runs the app's own silent uninstaller, read from the registry and never
+    guessed, which can undo whatever it did to defend itself;
   - takes ownership and resets the ACL of permission-denied leftovers, then
     retries the deletion;
   - queues anything still locked for deletion during the next boot (`MoveFileEx`
@@ -46,19 +50,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   string normalizes to) are resolved to `%SystemRoot%\System32` before launch,
   so an elevated run cannot be hijacked by a same-named binary earlier in the
   search path.
+- Documentation now describes Wixen's general purpose — removing any stubborn,
+  misbehaving Windows application — rather than framing it as an
+  antivirus-specific tool. The shipped catalog (four security suites) is
+  unchanged; the removal engine applies to every supported product alike.
 
 ### Notes
 
-- The escalation's Windows-only I/O (the SYSTEM relaunch via `schtasks`, invoking
-  the vendor uninstaller, take-ownership/`icacls`, `MoveFileEx`, and the
-  `RunOnce` write) compiles and is linted on `x86_64-pc-windows-msvc`, but **CI
-  cannot prove it works** against a real antivirus. Every decision it drives — the
-  command-line contract, the results serialization, the escalation choices — is
-  unit- and mutation-tested on Linux against stubs; the effects are unverified
-  until run on a Windows machine with the product installed. In particular the
-  session-0 SYSTEM relaunch and the cross-process report hand-off have not been
-  exercised on hardware. This must not be described as verified, or ship in a
-  tagged release, before that test.
+- The escalation's Windows-only I/O (the SYSTEM relaunch via `schtasks`,
+  invoking the vendor uninstaller, take-ownership/`icacls`, `MoveFileEx`, and
+  the `RunOnce` write) compiles and is linted on `x86_64-pc-windows-msvc`, but
+  **CI cannot prove it works** against a real installed application. Every
+  decision it drives — the command-line contract, the results serialization,
+  the escalation choices — is unit- and mutation-tested on Linux against stubs;
+  the effects are unverified until run on a Windows machine with the product
+  installed. In particular the session-0 SYSTEM relaunch and the cross-process
+  report hand-off have not been exercised on hardware. This must not be
+  described as verified, or ship in a tagged release, before that test.
 
 ## [0.4.0] - 2026-08-05
 
@@ -111,5 +119,6 @@ First public release.
 - Tag-triggered release workflow publishing the installer with a SHA-256
   checksum.
 
-[Unreleased]: https://github.com/PratikP1/Wixen-Uninstall/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/PratikP1/Wixen-Uninstall/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/PratikP1/Wixen-Uninstall/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/PratikP1/Wixen-Uninstall/releases/tag/v0.4.0

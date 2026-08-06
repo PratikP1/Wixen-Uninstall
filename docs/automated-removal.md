@@ -7,10 +7,11 @@ real hardware (see *What is testable, and what is not*)
 
 ## The problem this solves
 
-Consumer security suites defend themselves with a kernel driver that blocks
-other processes — Wixen included — from stopping their services or deleting
-their files. The historical workaround is *Safe Mode*, because the
-self-protection driver is not loaded there.
+Some applications actively resist removal. The hardest of them load a kernel
+driver that blocks other processes — Wixen included — from stopping their
+services or deleting their files; consumer security suites like Avast and AVG
+are the standout case, but the problem is general. The historical workaround is
+*Safe Mode*, because such a driver is not loaded there.
 
 Safe Mode is unacceptable for the users Wixen exists to serve. Windows 10's
 Safe Mode does not reliably load audio drivers, and without audio a blind user

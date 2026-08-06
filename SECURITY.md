@@ -16,9 +16,9 @@ Only the latest release receives fixes.
 ## What Wixen does, and why it needs Administrator
 
 Wixen deletes files, registry keys, Windows services, and scheduled tasks that
-belong to consumer security suites. Every one of those operations needs an
-elevated token, so the executable carries a manifest requesting Administrator
-and Windows shows a UAC prompt when you launch it.
+belong to the stubborn applications it removes. Every one of those operations
+needs an elevated token, so the executable carries a manifest requesting
+Administrator and Windows shows a UAC prompt when you launch it.
 
 That is a lot of privilege, so the design deliberately constrains it:
 
@@ -49,7 +49,7 @@ published alongside it on the
 [Releases](https://github.com/PratikP1/Wixen-Uninstall/releases) page:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.4.0.exe
+Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.5.0.exe
 ```
 
 Only download Wixen from the GitHub Releases page of this repository.

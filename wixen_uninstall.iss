@@ -15,7 +15,7 @@
   #define AppName      "Wixen Uninstaller"
 #endif
 #ifndef AppVersion
-  #define AppVersion   "0.4.0"
+  #define AppVersion   "0.5.0"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "PratikP1"
@@ -100,11 +100,11 @@ Source: "LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversi
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Parameters: ""; \
     WorkingDir: "{app}"; \
-    Comment: "Remove stubborn antivirus suites completely"
+    Comment: "Completely remove stubborn apps that resist a normal uninstall"
 
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
     Tasks: desktopicon; \
-    Comment: "Remove stubborn antivirus suites completely"
+    Comment: "Completely remove stubborn apps that resist a normal uninstall"
 
 [Run]
 ; Offer to launch immediately after install.
