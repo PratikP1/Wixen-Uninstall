@@ -65,8 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the escalation choices) is unit- and mutation-tested on Linux against stubs;
   the effects are unverified until run on a Windows machine with the product
   installed. In particular the session-0 SYSTEM relaunch and the cross-process
-  report hand-off have not been exercised on hardware. This must not be
-  described as verified, or ship in a tagged release, before that test.
+  report hand-off have not been exercised on hardware. This release ships with
+  that verification still outstanding: nothing here is described as verified,
+  and the release notes state the limitation plainly. It still needs confirming
+  on a Windows machine with the product installed.
 
 ## [0.4.0] - 2026-08-05
 

@@ -55,15 +55,42 @@ a removal.
 While it works, a progress bar names each stage rather than the window simply
 freezing.
 
+## Removing apps that fight back, without Safe Mode
+
+Some applications resist removal by locking files, denying permissions, or
+loading a kernel driver that blocks deletion while Windows runs (Avast and AVG
+are the standout case). Wixen handles these in normal Windows, with your screen
+reader and audio running. You do not need Safe Mode.
+
+When an ordinary removal is blocked, Wixen escalates on its own:
+
+- it runs the product's own silent uninstaller, read from the registry, which
+  can switch off self-protection from the inside;
+- it elevates to `NT AUTHORITY\SYSTEM` where Administrator is not enough;
+- it takes ownership of permission-locked files and folders, then retries;
+- it queues anything still locked for deletion on your next restart, and
+  registers itself to finish automatically after you reboot normally.
+
+If files were queued, restart Windows when it is convenient. Wixen runs once
+more on its own to finish the cleanup, with your screen reader and audio working
+as usual.
+
 ## Before you start
 
 - **Restart afterwards.** Removing kernel drivers and services only fully takes
-  effect after a reboot.
-- **Avast and AVG use self-protection.** If normal-mode cleanup reports access
-  errors, reboot into Windows Safe Mode and run Wixen again.
-- Wixen never deletes a driver file while its service is still registered; if
+  effect after a reboot. If Wixen queued locked files, it also finishes the
+  cleanup automatically after that restart.
+- Wixen never deletes a driver file while its service is still registered. If
   removal is blocked, the file is reported as skipped rather than deleted,
   because deleting it could stop Windows from starting.
+
+## Known limitation
+
+The automated removal of self-defending products is new in this release. Its
+decisions are covered by unit and mutation tests, but its effect against a live
+installation has not yet been verified on a Windows machine with one of these
+suites installed. If a removal leaves something behind, the report names exactly
+what remains, so you can run Wixen again or file an issue.
 
 ## Requirements
 
