@@ -119,6 +119,15 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
    services only fully takes effect after a reboot, and any queued files are
    deleted then.
 
+**Running it again is safe.** Wixen re-checks every target on each run, and
+anything already gone is reported as already removed rather than an error. So if
+an earlier run — or an older version of Wixen — left part of a product behind,
+just run it again: it re-attempts the whole removal with its full escalation
+(the product's own uninstaller, take-ownership, boot-time deletion, and running
+as SYSTEM) and clears most of what was left. Finishing may take a **restart**,
+since anything still locked is queued for boot-time deletion and Wixen resumes
+on its own after a normal reboot.
+
 > **Note:** The tool must be run with Administrator privileges.  Both the
 > installer and the installed application request elevation, so Windows prompts
 > you automatically.

@@ -186,6 +186,22 @@
       </li>
     </ul>
 
+    <h2>Running Wixen again</h2>
+    <p>
+      Wixen is safe to run more than once. It checks every target each time, and
+      anything already removed is reported as already gone rather than an error.
+    </p>
+    <p>
+      So if an earlier run — or an older version of Wixen — left part of a
+      product behind, just run Wixen again. It re-attempts the whole removal with
+      its full set of steps (the product's own uninstaller, taking ownership of
+      locked-down files, boot-time deletion, and running with the highest
+      privilege) and clears most of what was left. Finishing may take a
+      <strong>restart</strong>: anything still locked is queued for deletion
+      during your next reboot, and Wixen registers itself to run once more
+      automatically afterwards to complete the cleanup.
+    </p>
+
     <h2>Removing Wixen Uninstaller</h2>
     <p>
       To uninstall Wixen Uninstaller itself, open Settings &gt; Apps &gt; Installed
