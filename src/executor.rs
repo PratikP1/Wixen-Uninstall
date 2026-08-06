@@ -64,7 +64,7 @@ impl ExecutionReport {
     /// Each value is forced onto one line, because a Windows error string can
     /// carry a newline and the line-oriented [`parse_results`](Self::parse_results)
     /// would otherwise desynchronize. No serialization dependency, matching
-    /// [`ResumeState`](crate::resume::ResumeState).
+    /// [`ResumeState`].
     pub fn to_results_text(&self, resume_registered: bool) -> String {
         use std::fmt::Write as _;
         let mut text = String::new();

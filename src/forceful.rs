@@ -11,7 +11,7 @@
 //! `#[cfg(target_os = "windows")]`.
 //!
 //! The boot-safety guard is not re-implemented here: every decision routes
-//! through [`escalation::next_step`], which refuses to force a guarded driver.
+//! through [`next_step`], which refuses to force a guarded driver.
 
 use crate::escalation::{NextStep, Remedy, next_step};
 use crate::executor::ActionOutcome;
