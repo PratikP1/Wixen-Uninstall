@@ -1,17 +1,17 @@
-//! The escalation ladder — pure decisions about how hard to try.
+//! The escalation ladder: pure decisions about how hard to try.
 //!
 //! Author: PratikP1
 //!
 //! When ordinary deletion is refused, Wixen escalates: reset ownership and the
 //! ACL for something denied by permissions, or queue for boot-time deletion for
-//! something merely held open.  *Which* remedy fits an outcome, and — crucially
-//! — whether the boot-safety guard forbids forcing it at all, is decided here,
+//! something merely held open.  *Which* remedy fits an outcome, and (crucially)
+//! whether the boot-safety guard forbids forcing it at all, is decided here,
 //! in the tested core.  The Windows layer carries the decisions out; it never
 //! makes them.
 //!
 //! This is where the driver-guard invariant is enforced for the forceful
 //! paths: a kernel driver's image is never taken-ownership-of-and-deleted, nor
-//! queued for boot-time deletion, while its service is still registered —
+//! queued for boot-time deletion, while its service is still registered,
 //! because a registered boot-start driver with a missing file stops Windows
 //! from booting.  See `docs/automated-removal.md`.
 
@@ -34,7 +34,7 @@ pub enum Remedy {
 /// What to do after an attempt to remove a file produced a given outcome.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NextStep {
-    /// The artifact is gone — removed, or never there.
+    /// The artifact is gone: removed, or never there.
     Done,
     /// Apply this remedy and try again.
     Escalate(Remedy),
@@ -118,7 +118,7 @@ fn escalate_error(message: &str, last_remedy: Option<Remedy>) -> NextStep {
     match (classify_obstruction(message), last_remedy) {
         // Denied and untouched by force yet: fix the permissions first.
         (Obstruction::AccessDenied, None) => NextStep::Escalate(Remedy::TakeOwnership),
-        // Still denied after taking ownership: it must also be open — wait for
+        // Still denied after taking ownership: it must also be open; wait for
         // a boot where it is not.
         (Obstruction::AccessDenied, Some(Remedy::TakeOwnership)) => {
             NextStep::Escalate(Remedy::DelayUntilReboot)
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn a_guarded_driver_never_escalates_however_it_failed() {
         let driver = guarded_driver();
-        // Denied, in use, after ownership, after a delay — every combination
+        // Denied, in use, after ownership, after a delay: every combination
         // must refuse to force a driver whose service is still present.
         for outcome in [denied(), in_use(), ActionOutcome::Error("locked".into())] {
             for last in [
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn a_driver_escalates_normally_once_its_service_is_gone() {
         // With the service removed, blocking_guard clears and the image is fair
-        // game — that is the whole point of removing the service first.
+        // game; that is the whole point of removing the service first.
         let driver = guarded_driver();
         assert_eq!(
             next_step(&driver, &["aswSP"], None, &denied()),

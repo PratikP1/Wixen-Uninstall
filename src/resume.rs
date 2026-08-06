@@ -1,4 +1,4 @@
-//! Resume state — what a removal must finish after a normal restart.
+//! Resume state: what a removal must finish after a normal restart.
 //!
 //! Author: PratikP1
 //!
@@ -6,8 +6,8 @@
 //! `docs/automated-removal.md`), the removal is not finished, only *suspended*:
 //! the file goes at the next boot, but the registry keys and the follow-up
 //! sweep still have to run.  Wixen writes this state, registers itself to run
-//! once after the restart, and — when the user reboots **normally**, with audio
-//! and their screen reader — reads it back and completes the job.
+//! once after the restart, and (when the user reboots **normally**, with audio
+//! and their screen reader) reads it back and completes the job.
 //!
 //! The format is plain key/value text so the crate keeps its promise of no
 //! serialization dependency.  Parsing is total: a truncated or corrupt file
@@ -83,7 +83,7 @@ impl ResumeState {
     /// Parse the on-disk form.
     ///
     /// Returns `None` when the product line is missing or names an unknown
-    /// product — there is then nothing safe to resume.  Unknown keys and blank
+    /// product.  There is then nothing safe to resume.  Unknown keys and blank
     /// lines are ignored, and a file with no pending work parses to a state
     /// whose [`is_empty`](Self::is_empty) is true rather than an error.
     pub fn parse(text: &str) -> Option<Self> {

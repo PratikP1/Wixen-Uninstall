@@ -2,8 +2,8 @@
 //!
 //! Author: PratikP1
 //!
-//! Every removal action — `reg delete`, `sc delete`, `schtasks /Delete`, and
-//! deleting anything under Program Files — requires an elevated token.  The
+//! Every removal action (`reg delete`, `sc delete`, `schtasks /Delete`, and
+//! deleting anything under Program Files) requires an elevated token.  The
 //! shipped executable carries a manifest that asks Windows to elevate it, but a
 //! build produced without that manifest would otherwise fail every single
 //! action and present the user with a wall of "Access is denied".  Checking up

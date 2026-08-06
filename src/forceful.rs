@@ -3,7 +3,7 @@
 //! Author: PratikP1
 //!
 //! [`ForcefulExecutor`] is the seam between the tested escalation *decisions*
-//! (`escalation.rs`) and the Windows calls that carry them out — taking
+//! (`escalation.rs`) and the Windows calls that carry them out: taking
 //! ownership of a denied file, or queuing a locked one for boot-time deletion.
 //! Keeping it a trait means the loop that drives the ladder,
 //! [`resolve_file`], is exercised on Linux against a scripted stub, while the
@@ -37,7 +37,7 @@ pub trait ForcefulExecutor {
 /// How a single file ended up after the ladder ran to a conclusion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileResolution {
-    /// Gone now — removed outright, or forced after taking ownership.
+    /// Gone now: removed outright, or forced after taking ownership.
     Removed,
     /// Deliberately left: a guarded driver, or an already-benign skip.  Carries
     /// the reason for the report.
@@ -53,8 +53,8 @@ pub enum FileResolution {
 ///
 /// `initial` is the outcome of the ordinary deletion already attempted by the
 /// standard sweep.  Every branch is chosen by [`next_step`], so the driver
-/// guard holds without being restated here.  The ladder is finite —
-/// `None → TakeOwnership → DelayUntilReboot` — so this cannot loop.
+/// guard holds without being restated here.  The ladder is finite
+/// (`None → TakeOwnership → DelayUntilReboot`), so this cannot loop.
 pub fn resolve_file(
     file: &FilePath,
     removed_services: &[&str],
@@ -97,7 +97,7 @@ fn resolve_delayed(file: &FilePath, forceful: &dyn ForcefulExecutor) -> FileReso
 // ─── Command construction (pure, tested everywhere) ──────────────────────────
 //
 // These build the `takeown`/`icacls` argument lists.  They are called from the
-// Windows-only module, but kept out of it — and un-gated — so the recursion
+// Windows-only module, but kept out of it (and un-gated) so the recursion
 // logic is exercised by the test suite and cargo-mutants on Linux.  Off
 // Windows nothing but the tests calls them, hence the `cfg_attr` allow.
 
@@ -109,7 +109,7 @@ const ADMINISTRATORS_SID: &str = "*S-1-5-32-544";
 
 /// Arguments for `takeown.exe` to seize `file` for the Administrators group.
 ///
-/// A directory recurses; a single file does not — the difference decides
+/// A directory recurses; a single file does not.  The difference decides
 /// whether a whole product tree or just one image is taken, so it is pure and
 /// tested rather than buried in the Windows call.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
@@ -193,7 +193,7 @@ mod windows {
 
     /// Take ownership, grant Administrators full control, then retry the delete.
     ///
-    /// Ownership and the grant are best-effort — `takeown`/`icacls`, the same
+    /// Ownership and the grant are best-effort: `takeown`/`icacls`, the same
     /// built-in tools an administrator would use, invoked by absolute path like
     /// the rest of the executor.  The retry deletion is authoritative: whatever
     /// it reports is the outcome, so a failure to reset the ACL simply lets the
@@ -216,7 +216,7 @@ mod windows {
     /// Queue `file` for deletion at the next boot via `MoveFileEx`.
     ///
     /// The session manager performs the deletion during early boot, before the
-    /// process that holds the file open has started — no Safe Mode required.
+    /// process that holds the file open has started.  No Safe Mode required.
     pub fn schedule_delete_at_reboot(file: &FilePath) -> ActionOutcome {
         let wide = to_wide(&file.path);
 
@@ -278,7 +278,7 @@ impl ScriptedForcefulExecutor {
         }
     }
 
-    /// Nothing works — not even the reboot queue.
+    /// Nothing works, not even the reboot queue.
     pub fn nothing_works() -> Self {
         Self {
             ownership_outcome: ActionOutcome::Error("Access is denied.".to_owned()),

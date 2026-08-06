@@ -1,16 +1,16 @@
-//! Running a product's own uninstaller — the route past self-protection.
+//! Running a product's own uninstaller: the route past self-protection.
 //!
 //! Author: PratikP1
 //!
 //! Self-protection cannot block a product's *own* uninstaller, or the product
-//! would be unremovable.  So the most reliable way past it — without Safe Mode,
-//! and without operating the vendor's inaccessible settings UI — is to read the
+//! would be unremovable.  So the most reliable way past it (without Safe Mode,
+//! and without operating the vendor's inaccessible settings UI) is to read the
 //! uninstall command the product registered under `…\Uninstall\…` and run it.
 //!
 //! The policy is accessibility-first and encoded in the tested core here: run a
 //! vendor uninstaller **only when it is already silent**.  Guessing a silent
 //! switch risks leaving the uninstaller blocking on a dialog a screen-reader
-//! user then cannot dismiss — the very trap this feature removes.  Whatever the
+//! user then cannot dismiss: the very trap this feature removes.  Whatever the
 //! vendor uninstaller leaves behind is swept by the standard removal that
 //! follows, which is Wixen's existing strength.
 
@@ -23,8 +23,8 @@ use crate::uninstall::UninstallCommand;
 pub trait VendorUninstaller {
     /// The best uninstall string at `uninstall_key`, or `None` if absent.
     ///
-    /// The Windows implementation prefers `QuietUninstallString` — which is
-    /// silent by definition — and falls back to `UninstallString`.
+    /// The Windows implementation prefers `QuietUninstallString` (which is
+    /// silent by definition) and falls back to `UninstallString`.
     fn read_uninstall_string(&self, uninstall_key: &str) -> Option<String>;
 
     /// Run a parsed, silent uninstall command and report the outcome.
@@ -38,7 +38,7 @@ pub trait VendorUninstaller {
 pub enum VendorOutcome {
     /// A silent command was run; carries its result.
     Ran(ActionOutcome),
-    /// A string was present but not safely silent, so it was not run — running
+    /// A string was present but not safely silent, so it was not run. Running
     /// it could block on a dialog.
     SkippedNotSilent,
     /// A string was present but could not be parsed.
@@ -76,7 +76,7 @@ fn probe_and_run(key: &str, vendor: &dyn VendorUninstaller) -> VendorOutcome {
 /// The value names that hold an uninstall command, best first.  A
 /// `QuietUninstallString` is silent by definition, so it is preferred.
 ///
-/// Called only from the Windows module, but kept out here — and un-gated — so
+/// Called only from the Windows module, but kept out here (and un-gated) so
 /// the parsing below is tested on Linux; hence the non-Windows allow.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 const UNINSTALL_VALUE_NAMES: &[&str] = &["QuietUninstallString", "UninstallString"];
@@ -114,8 +114,8 @@ fn parse_reg_query_value(output: &str, value_name: &str) -> Option<String> {
 
 /// The real vendor uninstaller.
 ///
-/// Reads the uninstall string with `reg.exe query` — the same shell-out pattern
-/// the executor uses for `reg`/`sc`/`schtasks`, avoiding registry FFI — and runs
+/// Reads the uninstall string with `reg.exe query` (the same shell-out pattern
+/// the executor uses for `reg`/`sc`/`schtasks`, avoiding registry FFI) and runs
 /// the parsed command.  Off Windows it registers nothing and runs nothing.
 pub struct LiveVendorUninstaller;
 

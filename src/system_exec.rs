@@ -6,13 +6,13 @@
 //! against Administrators but not against SYSTEM, and some vendor uninstallers
 //! run *truly* silently only under SYSTEM.  So before running the removal
 //! itself, the interactive process re-launches Wixen as SYSTEM through a
-//! transient scheduled task — the standard technique, needing only the
-//! Administrator token Wixen already holds — runs it once, and deletes the task.
+//! transient scheduled task (the standard technique, needing only the
+//! Administrator token Wixen already holds), runs it once, and deletes the task.
 //!
 //! A SYSTEM process runs in **session 0** with no desktop, so it can show no
 //! menu, no progress dialog, and reach no screen reader.  The split is therefore
-//! strict: the interactive (Administrator) process owns every screen —
-//! selection, confirmation, the waiting dialog, the report — and the SYSTEM
+//! strict: the interactive (Administrator) process owns every screen
+//! (selection, confirmation, the waiting dialog, the report), and the SYSTEM
 //! process runs headless, executing the plan and writing an
 //! [`ExecutionReport`](crate::executor::ExecutionReport) to a results file the
 //! interactive process reads back.
@@ -22,7 +22,7 @@
 //! Administrator, exactly as it did before this existed.
 //!
 //! The re-launched instance takes the [`EXECUTE_FLAG`] branch, which only runs
-//! the removal and never relaunches — so a SYSTEM run can never spawn another,
+//! the removal and never relaunches, so a SYSTEM run can never spawn another,
 //! and no re-entrancy guard is needed.
 //!
 //! Only the command-line contract, the results path, and the task command are
@@ -48,7 +48,7 @@ const RESULTS_FILE: &str = "execute-result.txt";
 /// The product to remove headlessly, if `args` request `--execute <slug>`.
 ///
 /// Returns `None` when the flag is absent, carries no slug, or names an unknown
-/// product — in every case the normal interactive flow runs instead.  Mirrors
+/// product.  In every case the normal interactive flow runs instead.  Mirrors
 /// [`reboot::is_resume_request`](crate::reboot::is_resume_request), but carries
 /// the chosen product across the process boundary.
 pub fn parse_execute_request<I, S>(args: I) -> Option<Product>
@@ -93,7 +93,7 @@ pub fn task_run_command(executable: &Path, product: Product) -> String {
 /// the fact recorded so the interactive process can show the restart notice.
 ///
 /// The report is written to a temporary file and then renamed, so the
-/// interactive process — which waits for the results file to appear — can never
+/// interactive process, which waits for the results file to appear, can never
 /// read a half-written report.
 pub fn run_and_write_results(product: Product) -> std::io::Result<()> {
     write_results_for(product, &results_file_path(&program_data()))
@@ -102,7 +102,7 @@ pub fn run_and_write_results(product: Product) -> std::io::Result<()> {
 /// Execute `product`'s removal headlessly and write the report to `path`.
 ///
 /// Split from [`run_and_write_results`] so the write can be tested at a
-/// caller-chosen path — the public entry point always uses the one fixed
+/// caller-chosen path.  The public entry point always uses the one fixed
 /// `%ProgramData%` location, which parallel tests cannot share safely.
 fn write_results_for(product: Product, path: &Path) -> std::io::Result<()> {
     use crate::executor::{LiveExecutor, execute_full};
@@ -137,8 +137,8 @@ fn program_data() -> PathBuf {
         .unwrap_or_else(default_program_data)
 }
 
-/// `%ProgramData%`'s conventional location when the variable is unset — and,
-/// off Windows (where `--execute` is never really used but must still compile
+/// `%ProgramData%`'s conventional location when the variable is unset.  Off
+/// Windows (where `--execute` is never really used but must still compile
 /// and test), the temp directory, so a stray run writes somewhere harmless.
 fn default_program_data() -> PathBuf {
     #[cfg(target_os = "windows")]
@@ -195,7 +195,7 @@ mod windows {
 
         let executable = std::env::current_exe()?;
         create_task(&executable, product)?;
-        // However this ends — success, error, or panic — remove the task we
+        // However this ends (success, error, or panic), remove the task we
         // registered rather than leave it behind.
         let _cleanup = TaskCleanup;
         run_task()?;
@@ -356,8 +356,8 @@ mod tests {
         // to show, so the report must actually reach disk. Off Windows the Live
         // executors are no-ops, so this exercises the plumbing, not a removal.
         //
-        // The path is unique per process so parallel test runners — cargo-mutants
-        // `--jobs` in particular — never race on one shared results file.
+        // The path is unique per process so parallel test runners (cargo-mutants
+        // `--jobs` in particular) never race on one shared results file.
         let dir = std::env::temp_dir().join(format!("wixen_results_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("execute-result.txt");

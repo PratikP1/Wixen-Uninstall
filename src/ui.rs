@@ -2,8 +2,8 @@
 //!
 //! Author: PratikP1
 //!
-//! On Windows the binary drives native Win32 **task dialogs** — the modern
-//! dialog Windows itself uses, with a main instruction, command links, an
+//! On Windows the binary drives native Win32 **task dialogs** (the modern
+//! dialog Windows itself uses), with a main instruction, command links, an
 //! expandable details pane, and a progress bar.  Every control is a real
 //! system control, which is what makes the app work with NVDA, JAWS, and
 //! Narrator without any bespoke accessibility code: each product is its own
@@ -16,8 +16,8 @@
 
 // Only the calls into `TaskDialogIndirect` are Windows-only. The builder, the
 // flag computation, the UTF-16 conversion, and the struct layout are plain data
-// manipulation, so the module is compiled under `cfg(test)` everywhere too —
-// that is what puts them in front of the test suite and cargo-mutants, both of
+// manipulation, so the module is compiled under `cfg(test)` everywhere too.
+// That is what puts them in front of the test suite and cargo-mutants, both of
 // which run on Linux.
 #[cfg(any(target_os = "windows", test))]
 mod task_dialog;
@@ -78,8 +78,8 @@ pub fn confirm_plan(plan: &RemovalPlan) -> io::Result<bool> {
 
 /// Run the full, escalating removal, showing progress while it works.
 ///
-/// Returns the report and — when locked files were queued for boot-time
-/// deletion — the [`ResumeState`] the caller persists so the job finishes after
+/// Returns the report and, when locked files were queued for boot-time
+/// deletion, the [`ResumeState`] the caller persists so the job finishes after
 /// a normal restart.
 pub fn run_full_removal(
     plan: &RemovalPlan,
@@ -116,7 +116,7 @@ pub fn run_full_removal(
 ///
 /// Returns `Some((report, resume_registered))` when the SYSTEM run completed and
 /// its results were read back, and `None` when the relaunch is unavailable or
-/// failed — in which case the caller runs the removal in-process under
+/// failed, in which case the caller runs the removal in-process under
 /// Administrator.  Off Windows there is no SYSTEM to elevate to, so this is
 /// always `None` and the portable in-process path runs.
 pub fn run_removal_via_system(
@@ -391,8 +391,8 @@ pub fn restart_scheduled_body() -> &'static str {
 /// Body of the "working" dialog shown while the removal runs as SYSTEM.
 ///
 /// The SYSTEM run is headless, so this screen is all the user has until it
-/// finishes: it names the product, says the wait is expected, and — because a
-/// silent screen reads as a hang — explains that Wixen will show the results by
+/// finishes: it names the product, says the wait is expected, and (because a
+/// silent screen reads as a hang) explains that Wixen will show the results by
 /// itself.
 pub fn system_wait_body(product: Product) -> String {
     format!(
@@ -677,8 +677,8 @@ mod tests {
 
     #[test]
     fn no_report_wording_ever_sends_the_user_to_safe_mode() {
-        // The whole point of the escalation work is that Safe Mode — where a
-        // screen reader has no audio — is never the instruction. Guard every
+        // The whole point of the escalation work is that Safe Mode, where a
+        // screen reader has no audio, is never the instruction. Guard every
         // report string at once so a future edit cannot quietly reintroduce it.
         let partial = report(4, vec!["x: left in place".into()], vec!["y: denied".into()]);
         assert!(!report_body(&partial).contains("Safe Mode"));

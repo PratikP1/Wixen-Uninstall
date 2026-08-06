@@ -31,7 +31,7 @@ fuzz_target!(|data: &[u8]| {
             );
         }
         MenuChoice::Invalid(_) => {
-            // Anything else is fine — no further invariant to check.
+            // Anything else is fine. There is no further invariant to check.
         }
     }
 });

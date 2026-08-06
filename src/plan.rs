@@ -1,11 +1,11 @@
-//! Removal plan — pure data describing *what* would be removed.
+//! Removal plan: pure data describing *what* would be removed.
 //!
 //! Author: PratikP1
 //!
 //! The plan is built from static knowledge of where each supported product
 //! stores its files, registry keys, services, and scheduled tasks.  The
 //! products shipped today happen to be stubborn security suites, but the plan
-//! is just data — any application can be described the same way.  Nothing is
+//! is just data.  Any application can be described the same way.  Nothing is
 //! deleted here; the executor module consumes the plan.
 //!
 //! File templates use the placeholders defined in [`crate::paths`] rather than
@@ -183,7 +183,7 @@ impl RemovalPlan {
     /// The registry keys under `…\Uninstall\…`, whose values carry the
     /// vendor's own uninstall command.
     ///
-    /// Probed before deletion so the product can be asked to remove itself —
+    /// Probed before deletion so the product can be asked to remove itself:
     /// the one route past self-protection that does not require Safe Mode,
     /// since a product cannot block its own uninstaller.
     pub fn uninstall_keys(&self) -> impl Iterator<Item = &str> {

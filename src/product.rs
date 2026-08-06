@@ -1,4 +1,4 @@
-//! Product catalogue — the products we know how to remove.
+//! Product catalogue: the products we know how to remove.
 //!
 //! Author: PratikP1
 
@@ -93,7 +93,7 @@ impl Product {
     ///
     /// It deliberately does not mention Safe Mode: Windows 10 Safe Mode often
     /// has no audio for a screen reader, so the removal is designed to finish in
-    /// normal mode — running the product's own uninstaller and, if needed,
+    /// normal mode: running the product's own uninstaller and, if needed,
     /// completing after an ordinary restart.
     pub fn pre_removal_note(self) -> Option<&'static str> {
         match self {
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn slug_round_trips_through_from_slug_for_every_product() {
         // The resume state written before a reboot names the product by slug,
-        // so a mismatch here would resume as the wrong product — or not at all.
+        // so a mismatch here would resume as the wrong product, or not at all.
         for &product in Product::all() {
             assert_eq!(Product::from_slug(product.slug()), Some(product));
         }

@@ -29,7 +29,7 @@ exclude_re = [
     # test can reach it. Its wording is pinned by the `restart_notice` tests.
     "show_restart_scheduled",
     # `arrange_resume` and `take_pending_resume` are the reboot-persistence
-    # dispatch. Off Windows both are no-op stubs — write nothing, read nothing —
+    # dispatch. Off Windows both are no-op stubs (write nothing, read nothing),
     # so a Linux mutant either duplicates the stub (equivalent) or changes an
     # effect no test can observe. The RunOnce and state-file I/O they wrap is
     # Windows-only; the pure parts (`state_file_path`, `relaunch_command`,
@@ -40,7 +40,7 @@ exclude_re = [
     # Windows and returns `None` off it; a Linux mutant's value is swallowed by
     # the equally-stubbed `run`, so no test can distinguish it. The pure parser
     # it feeds, `parse_reg_query_value`, is tested directly and stays in scope,
-    # as do the scripted double's own methods — only the Live reader is excluded.
+    # as do the scripted double's own methods; only the Live reader is excluded.
     "LiveVendorUninstaller>::read_uninstall_string",
     # The `--resume` entry point's whole-body replacement with
     # `Ok(Default::default())`. `ExitCode: Default` exists only on newer
@@ -71,15 +71,15 @@ exclude_re = [
     # report serialization it depends on are all tested; only this Windows I/O
     # orchestration is excluded, matching `arrange_resume`/`take_pending_resume`.
     "run_execution_as_system",
-    # `run_removal_via_system`'s non-Windows arm is literally `Ok(None)` — the
-    # in-process fallback — so the whole-body mutant that returns `Ok(None)` is an
+    # `run_removal_via_system`'s non-Windows arm is literally `Ok(None)` (the
+    # in-process fallback), so the whole-body mutant that returns `Ok(None)` is an
     # identical program on Linux. Its Windows arm delegates to the untestable
     # `ui::windows` module. `main`'s use of the result (SYSTEM path vs fallback)
     # is covered by the cli tests, which take the `None` path off Windows.
     "run_removal_via_system",
     # The helpers in `ui/task_dialog.rs` that actually call into comctl32.
-    # Everything else in that file — the builder, the flag maths, the struct
-    # layout, the UTF-16 conversion — is portable and stays in scope.
+    # Everything else in that file (the builder, the flag maths, the struct
+    # layout, the UTF-16 conversion) is portable and stays in scope.
     "Dialog::show",
     "invoke",
     "set_help_handler",
@@ -90,6 +90,6 @@ exclude_re = [
 
 # `ui/windows.rs` is the only file left out: it is pure Win32 drawing, compiled
 # out on Linux, and what it *says* is decided by the tested functions in
-# `ui.rs`. `main.rs` and `ui/task_dialog.rs` are both covered — `main` through
+# `ui.rs`. `main.rs` and `ui/task_dialog.rs` are both covered: `main` through
 # `tests/cli.rs`, which drives the real binary over a pipe.
 exclude_globs = ["src/ui/windows.rs"]

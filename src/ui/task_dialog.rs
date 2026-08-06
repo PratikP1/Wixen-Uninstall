@@ -219,7 +219,7 @@ impl Dialog {
     /// `collapse_label` while it is open, so they must differ: a button that
     /// still reads "Show details" once the details are showing tells a screen
     /// reader user the opposite of the truth.  Leaving the expanded label unset
-    /// does not help — Windows then copies the collapsed one.
+    /// does not help: Windows then copies the collapsed one.
     pub fn details(mut self, expand_label: &str, collapse_label: &str, information: &str) -> Self {
         self.collapsed_control_text = Some(to_wide(expand_label));
         self.expanded_control_text = Some(to_wide(collapse_label));
@@ -542,7 +542,7 @@ fn make_range(low: usize, high: usize) -> isize {
 /// the conversion under test on Linux.
 fn to_wide(value: &str) -> Vec<u16> {
     // Task dialogs render plain LF correctly, but normalising keeps text that
-    // arrives with CRLF — such as an error string from Windows — from picking
+    // arrives with CRLF (such as an error string from Windows) from picking
     // up a stray carriage return.
     value
         .replace("\r\n", "\n")
@@ -587,8 +587,8 @@ mod tests {
 
     #[test]
     fn dialog_messages_match_their_documented_numbers() {
-        // Sending the wrong message id fails silently — the dialog simply
-        // ignores it — so the arithmetic is pinned to the absolute values from
+        // Sending the wrong message id fails silently (the dialog simply
+        // ignores it), so the arithmetic is pinned to the absolute values from
         // commctrl.h rather than trusted.
         assert_eq!(WM_USER, 0x0400);
         assert_eq!(TDM_CLICK_BUTTON, 1126);

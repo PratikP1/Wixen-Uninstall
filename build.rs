@@ -1,4 +1,4 @@
-//! Build script — embeds the Windows application manifest.
+//! Build script that embeds the Windows application manifest.
 //!
 //! Author: PratikP1
 //!
@@ -36,7 +36,7 @@ fn main() {
     // which would collide with the requestedExecutionLevel in our manifest.
     //
     // Do not quote the path. Each link argument reaches link.exe as one argv
-    // element, and link.exe then takes everything after the colon literally —
+    // element, and link.exe then takes everything after the colon literally,
     // so `/MANIFESTINPUT:"C:\...\x.manifest"` makes it look for a file whose
     // name begins with a quote:
     //

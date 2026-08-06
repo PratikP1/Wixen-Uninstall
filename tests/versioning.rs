@@ -12,7 +12,7 @@
 
 use std::{fs, path::PathBuf};
 
-/// The version this build was compiled with — the single source of truth.
+/// The version this build was compiled with, the single source of truth.
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn repository_file(relative_path: &str) -> String {
