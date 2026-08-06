@@ -43,6 +43,13 @@ browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
   once its service has been removed. If self-protection blocks the service, the
   driver file is left alone and reported as skipped, because deleting the image
   of a still-registered boot-start driver can stop Windows from starting.
+- **Handles self-protection without Safe Mode.** Avast and AVG load a kernel
+  driver that blocks removal while Windows runs normally. Rather than sending you
+  to Safe Mode — where Windows 10 often loads no audio driver, so a screen reader
+  cannot start — Wixen runs the product's *own* silent uninstaller, takes
+  ownership of permission-locked leftovers, and queues anything still locked for
+  deletion during the next **normal** restart, then finishes the job
+  automatically after you reboot.
 - **Follows your actual Windows layout.** Locations are resolved from
   `%ProgramFiles%`, `%ProgramData%`, and `%SystemRoot%` rather than assuming
   `C:\`, and every target is validated before deletion: drive roots, Windows,
@@ -64,8 +71,8 @@ browser, VPN, cleanup, and tune-up add-ons that often linger after uninstall.
 |---|---------|-------|
 | 1 | McAfee Total Protection | Also removes common McAfee LiveSafe and WebAdvisor / SiteAdvisor leftovers |
 | 2 | Norton 360 / Norton Security | Also removes common Norton Secure VPN and Norton Utilities leftovers |
-| 3 | Avast Antivirus / Avast Premium Security | Also removes common Avast Secure Browser and Avast Cleanup leftovers; Safe Mode may be needed if self-protection blocks normal-mode cleanup |
-| 4 | AVG AntiVirus / AVG Internet Security | Also removes common AVG Secure Browser and AVG TuneUp leftovers; Safe Mode may be needed if self-protection blocks normal-mode cleanup |
+| 3 | Avast Antivirus / Avast Premium Security | Also removes common Avast Secure Browser and Avast Cleanup leftovers; self-protection is handled automatically — no Safe Mode |
+| 4 | AVG AntiVirus / AVG Internet Security | Also removes common AVG Secure Browser and AVG TuneUp leftovers; self-protection is handled automatically — no Safe Mode |
 
 Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen-Uninstall/issues)
 
@@ -98,10 +105,13 @@ Want another product removed? [File an issue.](https://github.com/PratikP1/Wixen
    stopping half-finished can leave the product broken.
 7. Review the completion report.  It separates real errors from actions
    skipped for safety; expand **Show details** for the full list.
-8. If you are removing Avast or AVG and normal-mode cleanup reports access
-   errors, reboot into **Windows Safe Mode** and run Wixen again.
+8. For self-protecting products (Avast, AVG), Wixen runs the product's own
+   uninstaller and, if any file is still locked, queues it for removal during
+   the next restart — no Safe Mode. If files were queued, Wixen registers itself
+   to finish automatically after you restart.
 9. **Restart Windows** to finish the cleanup — removing kernel drivers and
-   services only fully takes effect after a reboot.
+   services only fully takes effect after a reboot, and any queued files are
+   deleted then.
 
 > **Note:** The tool must be run with Administrator privileges.  Both the
 > installer and the installed application request elevation, so Windows prompts
@@ -263,16 +273,27 @@ src/
   product.rs    - Product enum + parsing helpers
   paths.rs      - Windows location resolution + delete-target validation
   plan.rs       - RemovalPlan (pure data; no I/O)
-  executor.rs   - Executor trait + LiveExecutor + StubExecutor
+  executor.rs   - Executor trait, the guarded sweep, and the escalating
+                  execute_full / finish_resume orchestration
+  uninstall.rs  - parse a registry uninstall string into program + args (pure)
+  vendor.rs     - run the product's own silent uninstaller (I/O boundary)
+  stats_ini.rs  - enable Avast/AVG fully-silent uninstall via stats.ini (pure)
+  escalation.rs - per-artifact next step: take ownership, defer, skip, or fail
+  forceful.rs   - take-ownership / delayed-delete boundary + the per-file loop
+  reboot.rs     - persist a suspended run and register the RunOnce resume
+  resume.rs     - ResumeState: what a run must finish after a restart (pure)
+  system_exec.rs- re-launch as SYSTEM (schtasks) to run the removal headless,
+                  and read its report back across the process boundary
   elevation.rs  - Administrator privilege detection
   menu.rs       - accessible CLI fallback menu
   ui.rs         - screen wording (pure, unit tested) + platform dispatch
   ui/
     task_dialog.rs - safe wrapper over Win32 TaskDialogIndirect
     windows.rs     - the Windows screens, assembled from ui.rs wording
-  main.rs       - entry point
+  main.rs       - entry point; the --execute (SYSTEM) and --resume branches
 
 docs/
+  automated-removal.md      - design + plan for the escalation and resume flow
   WixenUninstallerHelp.html - installed HTML help guide
   release-notes.md          - body of the published GitHub Release
 
@@ -289,6 +310,7 @@ fuzz/
     fuzz_from_slug.rs
     fuzz_from_menu_index.rs
     fuzz_resolve_path.rs
+    fuzz_parse_uninstall.rs
 
 build.rs                  - embeds the Windows elevation manifest
 wixen_uninstall.manifest  - requireAdministrator, longPathAware, DPI awareness
@@ -320,6 +342,30 @@ prove it resolves at run time.
 3. **Files**, with guarded driver images skipped if step 2 failed for them.
 4. **Registry keys**, which is what finally makes the product invisible to
    Windows.
+
+### How stubborn, self-protecting products are handled
+
+`executor::execute_full` wraps that sweep in an escalation ladder so removal
+never needs Safe Mode — where Windows 10 often has no audio and a screen reader
+cannot start. First it runs the product's **own silent uninstaller** (read from
+the registry, never guessed), which can switch off self-protection from the
+inside. Then the guarded sweep above runs. Each file the sweep cannot delete is
+escalated one rung at a time by `forceful::resolve_file`, whose every branch is
+chosen by the pure `escalation::next_step`:
+
+- an *access-denied* file → **take ownership**, reset its ACL, retry;
+- a still-*locked* file → **queue it for deletion during the next boot**
+  (`MoveFileEx` with `MOVEFILE_DELAY_UNTIL_REBOOT`);
+- a **guarded driver** whose service survived → **skipped at every rung**, so
+  the boot-safety invariant holds on the delayed path exactly as on the
+  immediate one.
+
+When anything is queued for boot-time deletion the run is *suspended*, not
+finished: `reboot::arrange_resume` writes a small state file and a `RunOnce`
+entry, so after a **normal** restart Wixen relaunches with `--resume`, deletes
+the now-unlocked files' registry keys, reports, and clears up. Every decision in
+this ladder is pure and tested on Linux against stubs; only the Win32 calls it
+drives are Windows-gated.
 
 ---
 

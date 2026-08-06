@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Automated removal of self-protecting products, without Safe Mode.** Avast
+  and AVG load a kernel driver that blocks removal while Windows runs normally.
+  The previous advice was to reboot into Safe Mode — but Windows 10 often loads
+  no audio driver there, so a screen-reader user cannot start speech and is
+  stranded. Removal now escalates automatically in normal mode instead:
+  - runs the product's own silent uninstaller, read from the registry and never
+    guessed, which can disarm self-protection from the inside;
+  - takes ownership and resets the ACL of permission-denied leftovers, then
+    retries the deletion;
+  - queues anything still locked for deletion during the next boot (`MoveFileEx`
+    with `MOVEFILE_DELAY_UNTIL_REBOOT`);
+  - when files are deferred, registers a `RunOnce` resume so Wixen finishes the
+    job automatically after a **normal** restart, then clears its own state.
+- The driver-image guard now protects the delayed-deletion path as well: a
+  driver whose service is still registered is never queued for boot-time
+  removal, so the boot-safety invariant holds on every rung of the ladder.
+- **Removal now runs as `NT AUTHORITY\SYSTEM`.** Before running, Wixen
+  re-launches itself as SYSTEM through a transient scheduled task
+  (`schtasks /RU SYSTEM /RL HIGHEST`, run once and deleted) so it can pass
+  artifacts ACL'd against Administrators and let vendor uninstallers run truly
+  silently. A SYSTEM process has no desktop (session 0), so the interactive
+  Administrator process keeps all UI — showing a "working" dialog and reading
+  the SYSTEM run's report back from `%ProgramData%\Wixen\` — while the SYSTEM
+  process runs the removal headless via an `--execute` entry point. SYSTEM is an
+  amplifier, never a precondition: if the relaunch cannot be arranged, the
+  removal runs in-process under Administrator with the live progress bar, exactly
+  as before.
+- `fuzz_parse_uninstall` target for the new uninstall-string parser.
+
+### Changed
+
+- Report, help, and product-note wording no longer mention Safe Mode; they point
+  to a normal restart and, when files were deferred, an automatic resume.
+- Vendor uninstall commands with a bare program name (the `msiexec.exe` an MSI
+  string normalizes to) are resolved to `%SystemRoot%\System32` before launch,
+  so an elevated run cannot be hijacked by a same-named binary earlier in the
+  search path.
+
+### Notes
+
+- The escalation's Windows-only I/O (the SYSTEM relaunch via `schtasks`, invoking
+  the vendor uninstaller, take-ownership/`icacls`, `MoveFileEx`, and the
+  `RunOnce` write) compiles and is linted on `x86_64-pc-windows-msvc`, but **CI
+  cannot prove it works** against a real antivirus. Every decision it drives — the
+  command-line contract, the results serialization, the escalation choices — is
+  unit- and mutation-tested on Linux against stubs; the effects are unverified
+  until run on a Windows machine with the product installed. In particular the
+  session-0 SYSTEM relaunch and the cross-process report hand-off have not been
+  exercised on hardware. This must not be described as verified, or ship in a
+  tagged release, before that test.
+
 ## [0.4.0] - 2026-08-05
 
 First public release.

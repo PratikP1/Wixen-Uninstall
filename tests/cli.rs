@@ -17,12 +17,13 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
-/// Runs the binary with `input` on stdin and returns what it produced.
+/// Runs the binary with `args` and `input` on stdin and returns what it produced.
 ///
 /// `LiveExecutor` is a no-op off Windows, so a full run touches nothing on
 /// the machine running the tests.
-fn run_with_input(input: &str) -> Output {
+fn run_with_args(args: &[&str], input: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_wixen_uninstall"))
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -37,6 +38,11 @@ fn run_with_input(input: &str) -> Output {
         .expect("the child should accept input");
 
     child.wait_with_output().expect("the binary should exit")
+}
+
+/// Runs the binary with `input` on stdin and no arguments.
+fn run_with_input(input: &str) -> Output {
+    run_with_args(&[], input)
 }
 
 fn stdout_of(input: &str) -> String {
@@ -136,6 +142,79 @@ fn every_product_can_be_selected_by_number() {
 fn a_product_can_be_selected_by_slug() {
     let stdout = stdout_of("norton\n");
     assert!(stdout.contains("Norton 360 / Norton Security was removed."));
+}
+
+// ─── Resume after a restart ────────────────────────────────────────────────────
+
+#[test]
+fn resume_mode_with_nothing_pending_exits_quietly() {
+    // This is the branch a RunOnce relaunch takes after a restart. Off Windows
+    // there is never any saved state to finish, so the run must exit cleanly,
+    // show no report, and — critically — never fall through to the product menu.
+    // A restart-launched Wixen must not offer to start a fresh removal.
+    let output = run_with_args(&["--resume"], "");
+
+    assert!(
+        output.status.success(),
+        "resume must exit cleanly, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("output should be UTF-8");
+    assert!(
+        !stdout.contains("Report"),
+        "with nothing pending there is nothing to report: {stdout}"
+    );
+    assert!(
+        !stdout.contains("select a product to remove"),
+        "a resume run must never open the menu: {stdout}"
+    );
+}
+
+// ─── Headless SYSTEM execution ─────────────────────────────────────────────────
+
+#[test]
+fn execute_mode_with_a_product_exits_quietly() {
+    // This is the headless branch a SYSTEM relaunch takes. Off Windows the Live
+    // executors are no-ops, so it does its (empty) work, writes its report to a
+    // file rather than the console, and exits cleanly. It must never open the
+    // product menu: a SYSTEM relaunch must not start a fresh interactive removal.
+    //
+    // A unique ProgramData points the results file somewhere private to this
+    // process, so parallel test runners — cargo-mutants `--jobs` — never race on
+    // one shared file (a race there would flake and mis-attribute the failure).
+    let program_data = std::env::temp_dir().join(format!("wixen_cli_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&program_data);
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_wixen_uninstall"))
+        .args(["--execute", "avast"])
+        .env("ProgramData", &program_data)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary should start");
+    drop(child.stdin.take());
+    let output = child.wait_with_output().expect("the binary should exit");
+    let _ = std::fs::remove_dir_all(&program_data);
+
+    assert!(
+        output.status.success(),
+        "headless execute must exit cleanly, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("output should be UTF-8");
+    assert!(
+        !stdout.contains("select a product to remove"),
+        "a headless SYSTEM run must never open the menu: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Report"),
+        "the headless run reports to a file, not to the console: {stdout}"
+    );
 }
 
 // ─── Invalid input ───────────────────────────────────────────────────────────

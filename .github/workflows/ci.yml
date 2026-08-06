@@ -96,7 +96,7 @@ jobs:
       # that panics immediately, without turning CI into a fuzzing farm.
       - name: Smoke-run each fuzz target
         run: |
-          targets='fuzz_parse_input fuzz_from_slug fuzz_from_menu_index fuzz_resolve_path'
+          targets='fuzz_parse_input fuzz_from_slug fuzz_from_menu_index fuzz_resolve_path fuzz_parse_uninstall'
           for target in $targets; do
             cargo fuzz run "$target" -- -max_total_time=20
           done

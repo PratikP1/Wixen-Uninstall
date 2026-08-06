@@ -44,6 +44,19 @@ impl Product {
             .copied()
     }
 
+    /// The canonical lowercase slug, e.g. `"mcafee"`.
+    ///
+    /// Stable across releases: it names the product in the resume state written
+    /// before a reboot, so it must round-trip with [`Product::from_slug`].
+    pub fn slug(self) -> &'static str {
+        match self {
+            Product::McAfee => "mcafee",
+            Product::Norton => "norton",
+            Product::Avast => "avast",
+            Product::Avg => "avg",
+        }
+    }
+
     /// Parse from a canonical lowercase slug (for example `"mcafee"` or `"avg"`).
     ///
     /// Case-insensitive.  Returns `None` for unknown slugs.
@@ -77,10 +90,15 @@ impl Product {
     }
 
     /// Extra guidance shown before uninstalling products with self-protection.
+    ///
+    /// It deliberately does not mention Safe Mode: Windows 10 Safe Mode often
+    /// has no audio for a screen reader, so the removal is designed to finish in
+    /// normal mode — running the product's own uninstaller and, if needed,
+    /// completing after an ordinary restart.
     pub fn pre_removal_note(self) -> Option<&'static str> {
         match self {
             Product::Avast | Product::Avg => Some(
-                "This product uses self-protection drivers. For the cleanest removal, rerun Wixen from Windows Safe Mode if normal-mode cleanup reports access denied errors.",
+                "This product installs self-protection drivers. Wixen removes them automatically by running the product's own uninstaller and, if anything stays locked, finishing after a normal restart.",
             ),
             Product::McAfee | Product::Norton => None,
         }
@@ -264,12 +282,23 @@ mod tests {
     }
 
     #[test]
-    fn avast_has_safe_mode_note() {
-        assert!(Product::Avast.pre_removal_note().is_some());
+    fn avast_has_a_self_protection_note_that_avoids_safe_mode() {
+        let note = Product::Avast
+            .pre_removal_note()
+            .expect("Avast self-protects, so it needs a note");
+        assert!(note.contains("self-protection"));
+        assert!(
+            note.contains("restart"),
+            "the note must point to a normal restart, not Safe Mode: {note}"
+        );
+        assert!(
+            !note.contains("Safe Mode"),
+            "a screen-reader user has no audio in Safe Mode: {note}"
+        );
     }
 
     #[test]
-    fn mcafee_has_no_safe_mode_note() {
+    fn mcafee_has_no_self_protection_note() {
         assert!(Product::McAfee.pre_removal_note().is_none());
     }
 
@@ -280,5 +309,23 @@ mod tests {
         for (i, &product) in Product::all().iter().enumerate() {
             assert_eq!(Product::from_menu_index(i + 1), Some(product));
         }
+    }
+
+    #[test]
+    fn slug_round_trips_through_from_slug_for_every_product() {
+        // The resume state written before a reboot names the product by slug,
+        // so a mismatch here would resume as the wrong product — or not at all.
+        for &product in Product::all() {
+            assert_eq!(Product::from_slug(product.slug()), Some(product));
+        }
+    }
+
+    #[test]
+    fn slugs_are_distinct() {
+        let mut slugs: Vec<&str> = Product::all().iter().map(|p| p.slug()).collect();
+        let count = slugs.len();
+        slugs.sort_unstable();
+        slugs.dedup();
+        assert_eq!(slugs.len(), count, "two products share a slug");
     }
 }

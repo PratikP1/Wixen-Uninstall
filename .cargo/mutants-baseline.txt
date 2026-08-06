@@ -14,3 +14,12 @@
 # starts carrying real weight again.
 src/ui/task_dialog.rs: replace | with ^ in Dialog::flags
 src/ui/task_dialog.rs: replace | with ^ in make_range
+
+# The stats.ini section boundaries: `[Common]`'s start and end are always
+# `[...]` header lines, which carry no `=` and so are never key lines. Widening
+# an inclusive/exclusive boundary by one therefore includes only a non-key line
+# and cannot change which key is rewritten. `a_section_header_is_never_a_key_line`
+# records that invariant; if a header could ever be a key, that test fails.
+src/stats_ini.rs: replace > with >= in rewrite_within_common
+src/stats_ini.rs: replace < with <= in rewrite_within_common
+src/stats_ini.rs: replace + with * in section_contains_key

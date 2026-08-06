@@ -25,13 +25,16 @@ mod task_dialog;
 mod windows;
 
 #[cfg(not(target_os = "windows"))]
-use crate::executor::execute_with_progress;
+use crate::executor::execute_full_with_progress;
 #[cfg(not(target_os = "windows"))]
 use crate::menu::run_menu;
 use crate::{
     executor::{ExecutionReport, Executor, RemovalPhase},
+    forceful::ForcefulExecutor,
     plan::RemovalPlan,
     product::Product,
+    resume::ResumeState,
+    vendor::VendorUninstaller,
 };
 use std::io;
 
@@ -73,26 +76,80 @@ pub fn confirm_plan(plan: &RemovalPlan) -> io::Result<bool> {
     }
 }
 
-/// Run the plan, showing progress while it works.
-pub fn run_removal(
+/// Run the full, escalating removal, showing progress while it works.
+///
+/// Returns the report and — when locked files were queued for boot-time
+/// deletion — the [`ResumeState`] the caller persists so the job finishes after
+/// a normal restart.
+pub fn run_full_removal(
     plan: &RemovalPlan,
+    vendor: &(dyn VendorUninstaller + Sync),
     executor: &(dyn Executor + Sync),
-) -> io::Result<ExecutionReport> {
+    forceful: &(dyn ForcefulExecutor + Sync),
+) -> io::Result<(ExecutionReport, Option<ResumeState>)> {
     #[cfg(target_os = "windows")]
     {
-        windows::run_removal(plan, executor)
+        windows::run_full_removal(plan, vendor, executor, forceful)
     }
 
     #[cfg(not(target_os = "windows"))]
     {
+        println!("{RUNNING_UNINSTALLER}");
         let mut last_phase = None;
-        Ok(execute_with_progress(plan, executor, &mut |phase, done| {
-            if last_phase != Some(phase) {
-                last_phase = Some(phase);
-                println!("{}", phase.description());
-            }
-            let _ = done;
-        }))
+        Ok(execute_full_with_progress(
+            plan,
+            vendor,
+            executor,
+            forceful,
+            &mut |phase, done| {
+                if last_phase != Some(phase) {
+                    last_phase = Some(phase);
+                    println!("{}", phase.description());
+                }
+                let _ = done;
+            },
+        ))
+    }
+}
+
+/// Run the removal as SYSTEM, showing a "working" dialog while it runs headless.
+///
+/// Returns `Some((report, resume_registered))` when the SYSTEM run completed and
+/// its results were read back, and `None` when the relaunch is unavailable or
+/// failed — in which case the caller runs the removal in-process under
+/// Administrator.  Off Windows there is no SYSTEM to elevate to, so this is
+/// always `None` and the portable in-process path runs.
+pub fn run_removal_via_system(
+    plan: &RemovalPlan,
+    product: Product,
+) -> io::Result<Option<(ExecutionReport, bool)>> {
+    #[cfg(target_os = "windows")]
+    {
+        windows::run_removal_via_system(plan, product)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (plan, product);
+        Ok(None)
+    }
+}
+
+/// Tell the user a restart will finish the removal.
+///
+/// Shown only after a resume has actually been registered, so the promise that
+/// Wixen comes back on its own is one we have arranged to keep.
+pub fn show_restart_scheduled() -> io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        windows::show_restart_scheduled()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        println!("\n{RESTART_SCHEDULED_HEADING}");
+        println!("{}", restart_scheduled_body());
+        Ok(())
     }
 }
 
@@ -130,6 +187,13 @@ pub fn show_report(report: &ExecutionReport) -> io::Result<()> {
 
 /// Removing kernel drivers and services only takes full effect after a restart.
 pub const RESTART_ADVICE: &str = "Restart Windows to finish the cleanup.";
+
+/// Body shown while the product's own uninstaller runs, before the sweep's
+/// progress bar begins to move.
+pub const RUNNING_UNINSTALLER: &str = "Running the product's own uninstaller…";
+
+/// Heading of the restart-scheduled notice.
+pub const RESTART_SCHEDULED_HEADING: &str = "A restart will finish the removal.";
 
 /// Shown in every dialog's footer.
 pub const HELP_FOOTER: &str = "Press F1 for help.";
@@ -300,14 +364,43 @@ pub fn report_details(report: &ExecutionReport) -> Option<String> {
 }
 
 /// Footer on the report screen: the single most useful next step, or nothing.
+///
+/// No Safe Mode: Windows 10 Safe Mode often lacks the audio driver a screen
+/// reader needs, so it is not a step these users can take.  A normal restart
+/// releases most self-protection holds; anything still left clears on a second
+/// run.
 pub fn report_footer(report: &ExecutionReport) -> Option<&'static str> {
     if report.fully_succeeded() {
         return None;
     }
 
     Some(
-        "Some parts of this product defend themselves while Windows is running \
-         normally. Reboot into Windows Safe Mode and run Wixen again to finish.",
+        "Some parts of this product defend themselves while Windows is running. \
+         Restart Windows, then run Wixen again to clear anything left behind.",
+    )
+}
+
+/// Body of the restart-scheduled notice.
+pub fn restart_scheduled_body() -> &'static str {
+    "The last few files defend themselves while Windows is running, so Wixen has \
+     queued them to be deleted as Windows restarts. It will then run once, on its \
+     own, to finish clearing up. Restart Windows when you are ready — you do not \
+     need to do anything else."
+}
+
+/// Body of the "working" dialog shown while the removal runs as SYSTEM.
+///
+/// The SYSTEM run is headless, so this screen is all the user has until it
+/// finishes: it names the product, says the wait is expected, and — because a
+/// silent screen reads as a hang — explains that Wixen will show the results by
+/// itself.
+pub fn system_wait_body(product: Product) -> String {
+    format!(
+        "Removing {} with the highest privilege Windows allows, so nothing it \
+         protects can block the removal. This can take a few minutes. Wixen will \
+         show the results on its own when it finishes — you do not need to do \
+         anything.",
+        product.display_name()
     )
 }
 
@@ -350,12 +443,19 @@ mod tests {
     }
 
     #[test]
-    fn confirmation_carries_the_safe_mode_note_for_self_protecting_products() {
-        let avast = RemovalPlan::for_product(Product::Avast);
-        assert!(confirmation_body(&avast).contains("Safe Mode"));
+    fn confirmation_carries_the_self_protection_note_for_self_protecting_products() {
+        let avast = confirmation_body(&RemovalPlan::for_product(Product::Avast));
+        assert!(
+            avast.contains("self-protection"),
+            "a self-protecting product must warn about it: {avast}"
+        );
+        assert!(
+            !avast.contains("Safe Mode"),
+            "the note must not send a screen-reader user to Safe Mode: {avast}"
+        );
 
-        let mcafee = RemovalPlan::for_product(Product::McAfee);
-        assert!(!confirmation_body(&mcafee).contains("Safe Mode"));
+        let mcafee = confirmation_body(&RemovalPlan::for_product(Product::McAfee));
+        assert!(!mcafee.contains("self-protection"));
     }
 
     // ── Plan details ─────────────────────────────────────────────────────────
@@ -523,7 +623,15 @@ mod tests {
         );
         assert!(details.contains("aswSP.sys"));
 
-        assert!(report_footer(&report).unwrap().contains("Safe Mode"));
+        let footer = report_footer(&report).unwrap();
+        assert!(
+            footer.contains("Restart Windows"),
+            "the footer must give the normal-restart route: {footer}"
+        );
+        assert!(
+            !footer.contains("Safe Mode"),
+            "Safe Mode is inaccessible to a screen-reader user: {footer}"
+        );
     }
 
     #[test]
@@ -565,5 +673,53 @@ mod tests {
             "with no failures the pane must not open with blank lines: {details:?}"
         );
         assert!(!details.contains("Failed:"));
+    }
+
+    #[test]
+    fn no_report_wording_ever_sends_the_user_to_safe_mode() {
+        // The whole point of the escalation work is that Safe Mode — where a
+        // screen reader has no audio — is never the instruction. Guard every
+        // report string at once so a future edit cannot quietly reintroduce it.
+        let partial = report(4, vec!["x: left in place".into()], vec!["y: denied".into()]);
+        assert!(!report_body(&partial).contains("Safe Mode"));
+        assert!(!report_footer(&partial).unwrap().contains("Safe Mode"));
+        assert!(!restart_scheduled_body().contains("Safe Mode"));
+        assert!(!RESTART_ADVICE.contains("Safe Mode"));
+    }
+
+    #[test]
+    fn the_restart_notice_describes_the_automatic_finish() {
+        let body = restart_scheduled_body();
+        assert!(
+            body.contains("restart"),
+            "the notice is about restarting: {body}"
+        );
+        assert!(
+            body.contains("on its own") || body.contains("automatic"),
+            "it must say Wixen returns by itself, so the user is not left waiting: {body}"
+        );
+        assert!(RESTART_SCHEDULED_HEADING.contains("restart"));
+    }
+
+    #[test]
+    fn the_uninstaller_progress_line_names_the_uninstaller() {
+        assert!(RUNNING_UNINSTALLER.contains("uninstaller"));
+    }
+
+    #[test]
+    fn the_system_wait_body_names_the_product_and_reassures() {
+        let body = system_wait_body(Product::Norton);
+        assert!(
+            body.contains("Norton"),
+            "the headless wait must name what is being removed: {body}"
+        );
+        assert!(
+            body.contains("on its own") || body.contains("by itself"),
+            "a silent screen reads as a hang, so it must say Wixen returns itself: {body}"
+        );
+        assert!(
+            !body.contains("Safe Mode"),
+            "the escalation never sends a screen-reader user to Safe Mode: {body}"
+        );
     }
 }

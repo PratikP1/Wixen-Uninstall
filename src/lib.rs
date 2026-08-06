@@ -8,9 +8,17 @@
 //! the entire test suite can be run on any platform.
 
 pub mod elevation;
+pub mod escalation;
 pub mod executor;
+pub mod forceful;
 pub mod menu;
 pub mod paths;
 pub mod plan;
 pub mod product;
+pub mod reboot;
+pub mod resume;
+pub mod stats_ini;
+pub mod system_exec;
 pub mod ui;
+pub mod uninstall;
+pub mod vendor;
