@@ -96,6 +96,15 @@ pub fn task_run_command(executable: &Path, product: Product) -> String {
 /// interactive process — which waits for the results file to appear — can never
 /// read a half-written report.
 pub fn run_and_write_results(product: Product) -> std::io::Result<()> {
+    write_results_for(product, &results_file_path(&program_data()))
+}
+
+/// Execute `product`'s removal headlessly and write the report to `path`.
+///
+/// Split from [`run_and_write_results`] so the write can be tested at a
+/// caller-chosen path — the public entry point always uses the one fixed
+/// `%ProgramData%` location, which parallel tests cannot share safely.
+fn write_results_for(product: Product, path: &Path) -> std::io::Result<()> {
     use crate::executor::{LiveExecutor, execute_full};
     use crate::forceful::LiveForcefulExecutor;
     use crate::plan::RemovalPlan;
@@ -113,13 +122,12 @@ pub fn run_and_write_results(product: Product) -> std::io::Result<()> {
         None => false,
     };
 
-    let path = results_file_path(&program_data());
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let temporary = path.with_extension("tmp");
     std::fs::write(&temporary, report.to_results_text(resume_registered))?;
-    std::fs::rename(&temporary, &path)
+    std::fs::rename(&temporary, path)
 }
 
 /// `%ProgramData%`, or its default when the variable is unset.
@@ -343,18 +351,25 @@ mod tests {
     }
 
     #[test]
-    fn running_and_writing_results_leaves_a_readable_report() {
+    fn writing_results_leaves_a_readable_report() {
         // A run that skips the write leaves the interactive process with nothing
         // to show, so the report must actually reach disk. Off Windows the Live
         // executors are no-ops, so this exercises the plumbing, not a removal.
-        run_and_write_results(Product::McAfee).expect("the report is written");
-        let path = results_file_path(&program_data());
+        //
+        // The path is unique per process so parallel test runners — cargo-mutants
+        // `--jobs` in particular — never race on one shared results file.
+        let dir = std::env::temp_dir().join(format!("wixen_results_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("execute-result.txt");
+
+        write_results_for(Product::McAfee, &path).expect("the report is written");
         let text = std::fs::read_to_string(&path).expect("the report file exists");
         assert!(
             text.contains("product="),
             "the report names its product: {text}"
         );
-        let _ = std::fs::remove_file(&path);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

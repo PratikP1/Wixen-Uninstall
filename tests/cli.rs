@@ -180,7 +180,24 @@ fn execute_mode_with_a_product_exits_quietly() {
     // executors are no-ops, so it does its (empty) work, writes its report to a
     // file rather than the console, and exits cleanly. It must never open the
     // product menu: a SYSTEM relaunch must not start a fresh interactive removal.
-    let output = run_with_args(&["--execute", "avast"], "");
+    //
+    // A unique ProgramData points the results file somewhere private to this
+    // process, so parallel test runners — cargo-mutants `--jobs` — never race on
+    // one shared file (a race there would flake and mis-attribute the failure).
+    let program_data = std::env::temp_dir().join(format!("wixen_cli_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&program_data);
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_wixen_uninstall"))
+        .args(["--execute", "avast"])
+        .env("ProgramData", &program_data)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary should start");
+    drop(child.stdin.take());
+    let output = child.wait_with_output().expect("the binary should exit");
+    let _ = std::fs::remove_dir_all(&program_data);
 
     assert!(
         output.status.success(),

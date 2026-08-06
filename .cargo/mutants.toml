@@ -57,6 +57,13 @@ exclude_re = [
     # deterministic. Its `delete !` elevation guard stays in scope and is caught
     # by `execute_mode_with_a_product_exits_quietly` in cli.rs.
     "execute_headless -> io::Result<ExitCode> with Ok\\(Default",
+    # `run_and_write_results` composes the tested `write_results_for` with the one
+    # fixed `%ProgramData%` path. Its whole-body `Ok(())` mutant skips a write
+    # whose logic `writing_results_leaves_a_readable_report` pins at a caller-
+    # chosen path; the fixed path itself cannot be exercised parallel-safely (a
+    # shared file that cargo-mutants `--jobs` would race on), and the derivation
+    # (`results_file_path`, `program_data`) is tested on its own.
+    "run_and_write_results",
     # `run_execution_as_system` is the SYSTEM-relaunch entry point: the `schtasks`
     # create/run/await/delete dance, compiled only on Windows and never reachable
     # on Linux, so its mutants are missed there. The command-line contract
