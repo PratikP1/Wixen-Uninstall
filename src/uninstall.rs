@@ -4,8 +4,8 @@
 //!
 //! A product's `HKLM\…\Uninstall\<name>` key carries a `QuietUninstallString`
 //! or `UninstallString`: a command line, not a path.  Turning it into a program
-//! and an argument list is fiddly and security-relevant — an unquoted path with
-//! spaces, an MSI product code, a missing silent switch — so it lives here in
+//! and an argument list is fiddly and security-relevant (an unquoted path with
+//! spaces, an MSI product code, a missing silent switch), so it lives here in
 //! the pure, tested core.  Nothing in this module executes anything; it returns
 //! a [`UninstallCommand`] the Windows layer runs.
 
@@ -29,7 +29,7 @@ pub enum UninstallParseError {
     Empty,
     /// A quoted program path had no closing quote.
     UnterminatedQuote(String),
-    /// The program was empty — e.g. `""` — so there is nothing to run.
+    /// The program was empty (e.g. `""`), so there is nothing to run.
     MissingProgram(String),
 }
 
@@ -102,13 +102,13 @@ impl UninstallCommand {
     /// *guessed* silent switch could leave the uninstaller blocking on a
     /// dialog, which is precisely the accessibility trap this feature removes.
     /// So the policy is to prefer `QuietUninstallString`, normalize MSI to a
-    /// silent form, and otherwise decline to run it — never to guess.
+    /// silent form, and otherwise decline to run it, never to guess.
     pub fn is_silent(&self) -> bool {
         self.args.iter().any(|arg| is_known_silent_switch(arg))
     }
 
     /// `true` when [`program`](Self::program) is a bare filename carrying no
-    /// directory — the shape MSI normalization produces (`msiexec.exe`).
+    /// directory: the shape MSI normalization produces (`msiexec.exe`).
     ///
     /// Such a name must never reach the process launcher unchanged while Wixen
     /// is elevated: Windows would resolve it through the search path, which
@@ -333,6 +333,19 @@ mod tests {
             UninstallCommand::parse(r#""C:\ProgramData\{5AB}\uninst.exe" /remove"#).unwrap();
         assert_eq!(command.program, r"C:\ProgramData\{5AB}\uninst.exe");
         assert_eq!(command.args, vec!["/remove"]);
+    }
+
+    #[test]
+    fn a_bare_msiexec_with_no_product_code_is_a_non_silent_passthrough() {
+        // The fuzzer found "MSIEXEC.EXE": with no product code it is not an MSI
+        // string, so it is passed through as an ordinary program rather than
+        // normalized. It carries no silent switch, so `is_silent` is false and
+        // the vendor step never runs it, which is why a bare msiexec is safe to
+        // parse at face value.
+        let command = UninstallCommand::parse("MSIEXEC.EXE").unwrap();
+        assert_eq!(command.program, "MSIEXEC.EXE");
+        assert!(command.args.is_empty());
+        assert!(!command.is_silent(), "a bare msiexec must not be run");
     }
 
     // ── silence detection ────────────────────────────────────────────────────

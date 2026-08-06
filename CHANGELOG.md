@@ -12,10 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Automated removal of stubborn, self-defending applications, without Safe
-  Mode.** Some apps resist removal — locking files, denying permissions, or
+  Mode.** Some apps resist removal by locking files, denying permissions, or
   loading a kernel driver that blocks deletion while Windows runs (Avast and AVG
   are the standout case). The old advice for the hardest of them was to reboot
-  into Safe Mode — but Windows 10 often loads no audio driver there, so a
+  into Safe Mode. But Windows 10 often loads no audio driver there, so a
   screen-reader user cannot start speech and is stranded. Removal now escalates
   automatically in normal mode instead:
   - runs the app's own silent uninstaller, read from the registry and never
@@ -34,8 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`schtasks /RU SYSTEM /RL HIGHEST`, run once and deleted) so it can pass
   artifacts ACL'd against Administrators and let vendor uninstallers run truly
   silently. A SYSTEM process has no desktop (session 0), so the interactive
-  Administrator process keeps all UI — showing a "working" dialog and reading
-  the SYSTEM run's report back from `%ProgramData%\Wixen\` — while the SYSTEM
+  Administrator process keeps all UI (showing a "working" dialog and reading
+  the SYSTEM run's report back from `%ProgramData%\Wixen\`) while the SYSTEM
   process runs the removal headless via an `--execute` entry point. SYSTEM is an
   amplifier, never a precondition: if the relaunch cannot be arranged, the
   removal runs in-process under Administrator with the live progress bar, exactly
@@ -50,8 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   string normalizes to) are resolved to `%SystemRoot%\System32` before launch,
   so an elevated run cannot be hijacked by a same-named binary earlier in the
   search path.
-- Documentation now describes Wixen's general purpose — removing any stubborn,
-  misbehaving Windows application — rather than framing it as an
+- Documentation now describes Wixen's general purpose (removing any stubborn,
+  misbehaving Windows application) rather than framing it as an
   antivirus-specific tool. The shipped catalog (four security suites) is
   unchanged; the removal engine applies to every supported product alike.
 
@@ -61,8 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   invoking the vendor uninstaller, take-ownership/`icacls`, `MoveFileEx`, and
   the `RunOnce` write) compiles and is linted on `x86_64-pc-windows-msvc`, but
   **CI cannot prove it works** against a real installed application. Every
-  decision it drives — the command-line contract, the results serialization,
-  the escalation choices — is unit- and mutation-tested on Linux against stubs;
+  decision it drives (the command-line contract, the results serialization,
+  the escalation choices) is unit- and mutation-tested on Linux against stubs;
   the effects are unverified until run on a Windows machine with the product
   installed. In particular the session-0 SYSTEM relaunch and the cross-process
   report hand-off have not been exercised on hardware. This must not be

@@ -1,11 +1,11 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
-//! Wixen Uninstaller — entry point.
+//! Wixen Uninstaller: entry point.
 //!
 //! Author: PratikP1
 //!
 //! Three ways in.  Normally the user launches Wixen, picks a product, and the
-//! full escalating removal runs — preferably re-launched as `NT AUTHORITY\
+//! full escalating removal runs, preferably re-launched as `NT AUTHORITY\
 //! SYSTEM`, headless, through `--execute`, with the interactive process showing
 //! the UI and reading the results back.  When a removal queues a locked file for
 //! boot-time deletion it registers a `RunOnce` relaunch with `--resume`; the
@@ -63,7 +63,7 @@ fn resume_suspended_removal() -> io::Result<ExitCode> {
     }
 
     let Some(state) = reboot::take_pending_resume() else {
-        // Nothing to finish — the state was already consumed, or never written.
+        // Nothing to finish: the state was already consumed, or never written.
         return Ok(ExitCode::SUCCESS);
     };
 
@@ -75,7 +75,7 @@ fn resume_suspended_removal() -> io::Result<ExitCode> {
 /// The headless branch a SYSTEM relaunch takes: run the removal, write the
 /// results the interactive process reads back, and exit.
 ///
-/// It shows no UI — a SYSTEM process has no desktop — and never opens the menu,
+/// It shows no UI (a SYSTEM process has no desktop) and never opens the menu,
 /// so a relaunch can never loop back into a fresh removal.
 fn execute_headless(product: Product) -> io::Result<ExitCode> {
     // A SYSTEM token is elevated; if some misconfiguration launched this branch
@@ -103,7 +103,7 @@ fn normal_removal() -> io::Result<ExitCode> {
             continue;
         }
 
-        // Prefer running the whole removal as SYSTEM — headless, past artifacts
+        // Prefer running the whole removal as SYSTEM: headless, past artifacts
         // ACL'd against Administrators.  The SYSTEM run registers any boot-time
         // resume itself and reports whether it did.  When that relaunch is
         // unavailable or fails, run the removal in-process under Administrator

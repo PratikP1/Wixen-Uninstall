@@ -3,7 +3,7 @@
 //! Author: PratikP1
 //!
 //! Each screen is assembled from the wording in [`crate::ui`] and handed to
-//! [`super::task_dialog`].  Nothing here decides what to *say* — that lives in
+//! [`super::task_dialog`].  Nothing here decides what to *say*: that lives in
 //! the parent module, where it can be tested on any platform.
 
 use super::task_dialog::{
@@ -107,7 +107,7 @@ impl Drop for FinishOnDrop<'_> {
 ///
 /// Without this the window simply stops responding for the length of the
 /// removal, which for a screen-reader user is indistinguishable from a crash.
-/// The dialog opens on the uninstaller step — the one opaque phase — and the
+/// The dialog opens on the uninstaller step (the one opaque phase), and the
 /// bar begins to move once the guarded sweep starts.
 pub fn run_full_removal(
     plan: &RemovalPlan,
@@ -154,7 +154,7 @@ pub fn run_full_removal(
 
 /// Run the removal as SYSTEM behind a "working" dialog.
 ///
-/// The SYSTEM run is headless — session 0 has no desktop — so no per-item
+/// The SYSTEM run is headless (session 0 has no desktop), so no per-item
 /// progress comes back.  The bar creeps one step per poll toward, but never
 /// reaching, a fixed total: that reads as "still working" without ever claiming
 /// to be done, and the body text explains the wait.  Returns `None` when the
@@ -293,7 +293,7 @@ fn open_help_documentation() -> io::Result<()> {
 /// Only the directory holding the executable is searched.  Wixen runs elevated
 /// and hands this path straight to `ShellExecuteW`, so searching ancestor
 /// directories would let anyone who can write to a parent decide what an
-/// elevated browser opens — and the root of the system drive is writable by
+/// elevated browser opens, and the root of the system drive is writable by
 /// authenticated users on a default Windows install.
 fn find_help_path() -> Option<PathBuf> {
     let beside_executable = std::env::current_exe()

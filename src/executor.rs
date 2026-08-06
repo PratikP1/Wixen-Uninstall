@@ -1,4 +1,4 @@
-//! Executor — carries out the removal plan.
+//! Executor: carries out the removal plan.
 //!
 //! Author: PratikP1
 //!
@@ -57,14 +57,14 @@ impl ExecutionReport {
         self.actions_succeeded as f64 / self.actions_attempted as f64
     }
 
-    /// Serialize this report — plus whether a boot-time resume was registered —
+    /// Serialize this report (plus whether a boot-time resume was registered)
     /// to the plain key/value text a headless SYSTEM run hands back to the
     /// interactive process (see `system_exec`).
     ///
     /// Each value is forced onto one line, because a Windows error string can
     /// carry a newline and the line-oriented [`parse_results`](Self::parse_results)
     /// would otherwise desynchronize. No serialization dependency, matching
-    /// [`ResumeState`](crate::resume::ResumeState).
+    /// [`ResumeState`].
     pub fn to_results_text(&self, resume_registered: bool) -> String {
         use std::fmt::Write as _;
         let mut text = String::new();
@@ -227,7 +227,7 @@ pub trait Executor {
 /// Which group of artifacts the executor is working through.
 ///
 /// Reported to the UI so a long removal can say what it is doing rather than
-/// looking frozen — which, with a screen reader, is indistinguishable from a
+/// looking frozen.  With a screen reader, that is indistinguishable from a
 /// crash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemovalPhase {
@@ -292,7 +292,7 @@ fn driver_guard_reason(service: &str) -> String {
 ///
 /// Ordering is deliberate and load-bearing.  Scheduled tasks go first so a
 /// self-repair task cannot reinstate what we are about to remove; services
-/// next, so their file handles are released and — critically — so a driver's
+/// next, so their file handles are released and, critically, so a driver's
 /// registration is gone before its image is deleted; then files; then the
 /// registry, which is what makes the removal invisible to Windows.
 pub fn execute(plan: &RemovalPlan, executor: &dyn Executor) -> ExecutionReport {
@@ -366,8 +366,8 @@ use crate::vendor::{VendorOutcome, VendorUninstaller, run_vendor_uninstallers};
 /// A full, escalating removal that does not require Safe Mode.
 ///
 /// Runs the product's own uninstaller first (the route past self-protection),
-/// then the standard guarded sweep, escalating each stubborn file — take
-/// ownership, or queue for boot-time deletion — via `forceful`.  Returns the
+/// then the standard guarded sweep, escalating each stubborn file (take
+/// ownership, or queue for boot-time deletion) via `forceful`.  Returns the
 /// report and, when anything was deferred to the next boot, the [`ResumeState`]
 /// the caller persists so Wixen can finish after a **normal** restart.
 ///
@@ -385,8 +385,8 @@ pub fn execute_full(
 
 /// As [`execute_full`], reporting progress after every swept action.
 ///
-/// The vendor uninstaller runs first and reports nothing — it is one opaque,
-/// possibly slow step with no per-item progress to give — so the count starts
+/// The vendor uninstaller runs first and reports nothing (it is one opaque,
+/// possibly slow step with no per-item progress to give), so the count starts
 /// advancing only once the guarded sweep begins.  From there `on_progress`
 /// fires after each task, service, file, and registry key, exactly matching
 /// [`RemovalPlan::action_count`], so the progress bar the simple
@@ -672,7 +672,7 @@ pub(crate) mod windows {
             Err(error) => return ActionOutcome::Error(error.to_string()),
         };
 
-        // Stop first (ignore errors — may already be stopped).
+        // Stop first (ignore errors because it may already be stopped).
         let _ = Command::new(&sc).args(["stop", &svc.name]).output();
 
         match Command::new(&sc).args(["delete", &svc.name]).output() {
@@ -1057,7 +1057,7 @@ mod tests {
     #[test]
     fn the_resume_flag_round_trips_both_ways() {
         // The flag decides whether the interactive process promises an automatic
-        // restart, so true and false must be distinguishable — not both parsed
+        // restart, so true and false must be distinguishable, not both parsed
         // as the same value.
         let report = detailed_report();
         assert_eq!(
@@ -1375,7 +1375,7 @@ mod tests {
     fn a_registry_failure_with_nothing_deferred_is_an_error_not_a_restart() {
         // Files all delete, so nothing is queued for reboot; a registry key that
         // then fails has no pending restart to ride on, so it must be a hard
-        // error — not silently carried to a resume that will never happen.
+        // error, not silently carried to a resume that will never happen.
         let plan = mcafee_plan();
         let stub = StubExecutor {
             registry_outcome: ActionOutcome::Error("still locked".to_owned()),

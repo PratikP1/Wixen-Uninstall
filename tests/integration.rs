@@ -1,4 +1,4 @@
-//! Integration tests — full pipeline from product selection through execution.
+//! Integration tests: full pipeline from product selection through execution.
 //!
 //! Author: PratikP1
 
@@ -76,7 +76,7 @@ fn avg_full_removal_succeeds_with_stub() {
 #[test]
 fn removal_is_idempotent_when_already_uninstalled() {
     // Running against a system where the product is already gone should still
-    // succeed — NotFound is treated as success.
+    // succeed: NotFound is treated as success.
     for &product in Product::all() {
         let plan = RemovalPlan::for_product(product);
         let stub = StubExecutor::all_not_found();

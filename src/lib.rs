@@ -1,4 +1,4 @@
-//! Wixen Uninstall — core library.
+//! Wixen Uninstall: core library.
 //!
 //! Author: PratikP1
 //!

@@ -4,7 +4,7 @@
 //!
 //! `Instup.exe /instop:uninstall /silent` only runs unattended when the
 //! `Common` section of `…\setup\stats.ini` contains `SilentUninstallEnabled=1`.
-//! Without it the uninstaller stops on a dialog — the accessibility trap this
+//! Without it the uninstaller stops on a dialog: the accessibility trap this
 //! feature exists to remove.  The edit is a pure text transform, tested here;
 //! the Windows layer only reads and writes the file.
 
@@ -16,7 +16,7 @@ const SILENT_LINE: &str = "SilentUninstallEnabled=1";
 
 /// Return `contents` with `SilentUninstallEnabled=1` set in `[Common]`.
 ///
-/// An existing key — whatever its value or spacing — is replaced; a missing key
+/// An existing key (whatever its value or spacing) is replaced; a missing key
 /// is inserted under an existing `[Common]`; a missing section is appended.
 /// Every other line is preserved exactly, so an unrelated setting is never
 /// disturbed.

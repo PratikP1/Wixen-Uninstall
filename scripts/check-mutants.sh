@@ -11,8 +11,8 @@
 #
 # A survivor means some behaviour is not pinned by any test: the code could be
 # changed that way and the suite would still pass. The baseline holds the few
-# survivors that are *equivalent* mutants — where the mutated program is
-# genuinely identical — and every one carries a comment saying why.
+# survivors that are *equivalent* mutants (where the mutated program is
+# genuinely identical), and every one carries a comment saying why.
 set -euo pipefail
 
 readonly BASELINE=".cargo/mutants-baseline.txt"
@@ -46,7 +46,7 @@ cat >&2 <<'MESSAGE'
 error: the set of surviving mutants changed.
 
   Lines marked + survived but are not on the baseline. Each one is behaviour no
-  test pins down — write the test that fails without it. Only add an entry to
+  test pins down. Write the test that fails without it. Only add an entry to
   .cargo/mutants-baseline.txt if the mutant is provably equivalent, and say why.
 
   Lines marked - are on the baseline but no longer survive. That is good news:

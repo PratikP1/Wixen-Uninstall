@@ -150,7 +150,7 @@ fn a_product_can_be_selected_by_slug() {
 fn resume_mode_with_nothing_pending_exits_quietly() {
     // This is the branch a RunOnce relaunch takes after a restart. Off Windows
     // there is never any saved state to finish, so the run must exit cleanly,
-    // show no report, and — critically — never fall through to the product menu.
+    // show no report, and, critically, never fall through to the product menu.
     // A restart-launched Wixen must not offer to start a fresh removal.
     let output = run_with_args(&["--resume"], "");
 
@@ -182,7 +182,7 @@ fn execute_mode_with_a_product_exits_quietly() {
     // product menu: a SYSTEM relaunch must not start a fresh interactive removal.
     //
     // A unique ProgramData points the results file somewhere private to this
-    // process, so parallel test runners — cargo-mutants `--jobs` — never race on
+    // process, so parallel test runners (cargo-mutants `--jobs`) never race on
     // one shared file (a race there would flake and mis-attribute the failure).
     let program_data = std::env::temp_dir().join(format!("wixen_cli_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&program_data);

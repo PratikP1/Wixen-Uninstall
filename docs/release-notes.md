@@ -1,6 +1,6 @@
-Wixen Uninstaller removes stubborn, misbehaving Windows applications — and the
-companion browsers, VPNs, and tune-up tools that linger after the official
-uninstaller claims to be done. It ships today with definitions for four
+Wixen Uninstaller removes stubborn, misbehaving Windows applications. It also
+removes the companion browsers, VPNs, and tune-up tools that linger after the
+official uninstaller claims to be done. It ships today with definitions for four
 notoriously stubborn security suites; the removal engine is general, and the
 list is meant to grow.
 
@@ -31,9 +31,9 @@ Get-FileHash -Algorithm SHA256 .\WixenUninstaller-Setup-0.5.0.exe
 
 ## Accessibility
 
-Wixen is built on native Windows task dialogs — the same modern dialog Windows
-itself uses — so NVDA, JAWS, and Narrator read every screen without any special
-configuration, and everything scales correctly on high-DPI displays.
+Wixen is built on native Windows task dialogs, the same modern dialog Windows
+itself uses. That means NVDA, JAWS, and Narrator read every screen without any
+special configuration, and everything scales correctly on high-DPI displays.
 
 Each product is its own labelled button, so a screen reader announces the
 product name and what its cleanup sweeps up, rather than a bare "Yes" or "No".

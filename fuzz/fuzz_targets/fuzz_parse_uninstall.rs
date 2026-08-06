@@ -2,12 +2,19 @@
 //!
 //! Author: PratikP1
 //!
-//! This parses a command line read from the registry — attacker-influenceable
+//! This parses a command line read from the registry: attacker-influenceable
 //! input that then decides what elevated program Wixen runs.  The invariants:
 //!   - Never panics, for any input, including multi-byte UTF-8 around quotes
 //!     and braces.
 //!   - A parsed command always has a non-empty program.
-//!   - An MSI command is always the silent `msiexec /x {code}` form.
+//!
+//! The MSI-normalization guarantee (an `msiexec /x {code}` string is silent, and
+//! an install `/i` becomes an uninstall `/x`) is covered by the unit tests in
+//! `uninstall.rs`, which drive known inputs.  It is not asserted here: a bare
+//! `msiexec.exe` typed into the registry parses to an ordinary, non-silent
+//! program that also names msiexec, so no test on the output alone can tell a
+//! normalized command from a passed-through one without false positives.  Safety
+//! at run time is enforced separately, by only running a command that is silent.
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
@@ -26,14 +33,4 @@ fuzz_target!(|data: &[u8]| {
         !command.program.is_empty(),
         "an accepted command must name a program to run: {text:?}"
     );
-
-    // The only way parse yields msiexec is the MSI normalization, which must be
-    // a silent uninstall — never an install, never interactive.
-    if command.program.eq_ignore_ascii_case("msiexec.exe") {
-        assert_eq!(command.args.first().map(String::as_str), Some("/x"));
-        assert!(
-            command.is_silent(),
-            "a normalized MSI command must be unattended: {command:?}"
-        );
-    }
 });

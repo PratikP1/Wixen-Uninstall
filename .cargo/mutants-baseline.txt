@@ -1,6 +1,6 @@
 # Mutants that survive on purpose, checked by CI.
 #
-# Every entry here must be an *equivalent* mutant — one where the mutated
+# Every entry here must be an *equivalent* mutant: one where the mutated
 # program is identical to the original, so no test could ever tell them apart.
 # Anything else surviving is a gap in the tests and must fail the build.
 #

@@ -23,7 +23,7 @@ name = "wixen_uninstall_lib"
 path = "src/lib.rs"
 
 [dependencies]
-# No runtime dependencies — the library core is pure Rust.
+# No runtime dependencies: the library core is pure Rust.
 # The Windows-specific uninstall calls are gated behind #[cfg(target_os = "windows")].
 
 [dev-dependencies]

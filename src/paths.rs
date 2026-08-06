@@ -27,7 +27,7 @@ const PLACEHOLDER_OPEN: char = '{';
 const PLACEHOLDER_CLOSE: char = '}';
 const SEPARATOR: char = '\\';
 
-/// A path directly beneath a drive root — `C:\McAfee` — is never something we
+/// A path directly beneath a drive root (`C:\McAfee`) is never something we
 /// are willing to delete recursively; real product data always nests deeper.
 const MINIMUM_SEGMENTS_BELOW_DRIVE: usize = 2;
 
@@ -94,7 +94,7 @@ impl WindowsLocations {
     ///
     /// Taking the lookup as a parameter keeps the fallback chain a pure
     /// function, so tests can cover it without mutating the process
-    /// environment — which is racy under the parallel test harness.
+    /// environment, which is racy under the parallel test harness.
     fn from_lookup(lookup: &dyn Fn(&str) -> Option<String>) -> Self {
         let read = |name: &str| lookup(name).filter(|value| !value.is_empty());
 

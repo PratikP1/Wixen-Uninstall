@@ -5,8 +5,8 @@
 //! When a locked file is queued for boot-time deletion, the removal is
 //! suspended.  Wixen writes the [`ResumeState`] to a file under
 //! `%ProgramData%\Wixen\` and registers a `RunOnce` entry so Windows launches
-//! it once more after the **next normal restart** — audio present, screen
-//! reader running.  It then reads the state back, finishes the registry cleanup,
+//! it once more after the **next normal restart** (audio present, screen
+//! reader running).  It then reads the state back, finishes the registry cleanup,
 //! reports, and clears both the file and the `RunOnce` entry.
 //!
 //! The path derivation and the relaunch command are pure and tested here; the
